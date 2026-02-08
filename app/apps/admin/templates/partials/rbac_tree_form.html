@@ -30,6 +30,8 @@
               type="checkbox"
               name="perm_{{ node.key }}"
               value="{{ action }}"
+              data-perm-action-value="{{ action }}"
+              {% if action == "read" %}data-perm-read="true"{% endif %}
               {% if action in checked_map.get(node.key, []) %}checked{% endif %}
             />
             {{ action_labels[action] }}

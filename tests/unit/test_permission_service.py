@@ -55,7 +55,7 @@ async def test_resolve_permission_map_uses_role_permissions(monkeypatch) -> None
         status="enabled",
         permissions=[
             {"resource": "admin_users", "action": "read", "status": "enabled"},
-            {"resource": "admin_users", "action": "update", "status": "disabled"},
+            {"resource": "admin_users", "action": "update", "status": "enabled"},
             {"resource": "config", "action": "read", "status": "enabled"},
             {"resource": "config", "action": "invalid", "status": "enabled"},
         ],
@@ -77,6 +77,33 @@ async def test_resolve_permission_map_uses_role_permissions(monkeypatch) -> None
         "config": {"read"},
     }
     assert request.state.permission_flags["admin_users"]["update"] is False
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_resolve_permission_map_requires_read_for_mutating_actions(monkeypatch) -> None:
+    request = SimpleNamespace(session={"admin_id": "abc"}, state=SimpleNamespace())
+
+    admin = SimpleNamespace(status="enabled", role_slug="admin")
+    role = SimpleNamespace(
+        status="enabled",
+        permissions=[
+            {"resource": "admin_users", "action": "update", "status": "enabled"},
+        ],
+    )
+
+    async def fake_get_admin_by_id(_admin_id: str):
+        return admin
+
+    async def fake_get_role_by_slug(_role_slug: str):
+        return role
+
+    monkeypatch.setattr(permission_service.auth_service, "get_admin_by_id", fake_get_admin_by_id)
+    monkeypatch.setattr(permission_service.role_service, "get_role_by_slug", fake_get_role_by_slug)
+
+    permission_map = await permission_service.resolve_permission_map(request)
+
+    assert permission_map == {}
 
 
 @pytest.mark.unit

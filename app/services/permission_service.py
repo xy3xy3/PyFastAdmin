@@ -47,6 +47,30 @@ def _normalize_permission_items(items: list[Any] | None) -> dict[str, set[str]]:
     return permission_map
 
 
+def _apply_action_constraints(permission_map: dict[str, set[str]], role_slug: str) -> dict[str, set[str]]:
+    """约束动作依赖：有增删改必须有查看；viewer 仅保留查看。"""
+
+    normalized: dict[str, set[str]] = {}
+    for resource, actions in permission_map.items():
+        allowed_actions = _RESOURCE_ACTIONS.get(resource, set())
+        if not allowed_actions:
+            continue
+
+        action_set = set(actions) & allowed_actions
+        if "read" in allowed_actions and "read" not in action_set:
+            action_set.discard("create")
+            action_set.discard("update")
+            action_set.discard("delete")
+
+        if role_slug == "viewer":
+            action_set = {"read"} if "read" in action_set else set()
+
+        if action_set:
+            normalized[resource] = action_set
+
+    return normalized
+
+
 def default_permission_map(role_slug: str) -> dict[str, set[str]]:
     """默认角色兜底权限。"""
     if role_slug in {"super", "admin"}:
@@ -82,6 +106,8 @@ async def resolve_permission_map(request: Request) -> dict[str, set[str]]:
         permission_map = _normalize_permission_items(role.permissions)
     else:
         permission_map = default_permission_map(admin.role_slug)
+
+    permission_map = _apply_action_constraints(permission_map, admin.role_slug)
 
     request.state.permission_map = permission_map
     request.state.permission_flags = build_permission_flags(permission_map)

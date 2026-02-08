@@ -194,10 +194,22 @@ def build_checked_map(form_data) -> dict[str, set[str]]:
     return checked_map
 
 
-def build_permissions(form_data, owner: str) -> list[dict[str, Any]]:
+def build_permissions(form_data, owner: str, role_slug: str = "") -> list[dict[str, Any]]:
     permissions: list[dict[str, Any]] = []
+    force_read_only = role_slug == "viewer"
     for node in iter_leaf_nodes(ADMIN_TREE):
-        actions = form_data.getlist(f"perm_{node['key']}")
+        allowed_actions = set(node.get("actions", []))
+        actions = [
+            str(action)
+            for action in form_data.getlist(f"perm_{node['key']}")
+            if str(action) in allowed_actions
+        ]
+        if "read" in allowed_actions:
+            if force_read_only:
+                actions = ["read"] if actions else []
+            elif any(action != "read" for action in actions) and "read" not in actions:
+                actions.append("read")
+
         for action in actions:
             description = f"{node['name']} | {node['url']}"
             permissions.append(
@@ -372,7 +384,7 @@ async def role_create(
         return templates.TemplateResponse("partials/role_form.html", context, status_code=422)
 
     owner = request.session.get("admin_name") or "system"
-    form["permissions"] = build_permissions(form_data, owner)
+    form["permissions"] = build_permissions(form_data, owner, role_slug=form["slug"])
     await role_service.create_role(form)
     await log_service.record_request(
         request,
@@ -432,7 +444,7 @@ async def role_update(
         return templates.TemplateResponse("partials/role_form.html", context, status_code=422)
 
     owner = request.session.get("admin_name") or "system"
-    form["permissions"] = build_permissions(form_data, owner)
+    form["permissions"] = build_permissions(form_data, owner, role_slug=role.slug)
     await role_service.update_role(role, form)
     await log_service.record_request(
         request,

@@ -1,0 +1,90 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --paper: 252 248 242;
+    --ink: 18 20 24;
+    --accent: 192 64 43;
+    --accent-cool: 33 112 125;
+    --muted: 104 111 117;
+  }
+
+  html {
+    scroll-behavior: smooth;
+  }
+
+  body {
+    @apply font-body text-[rgb(var(--ink))] bg-[rgb(var(--paper))] min-h-screen;
+    background-image:
+      radial-gradient(1400px 500px at -10% -20%, rgba(192, 64, 43, 0.18), transparent 65%),
+      radial-gradient(1100px 420px at 110% -10%, rgba(33, 112, 125, 0.15), transparent 60%),
+      linear-gradient(120deg, rgba(18, 20, 24, 0.04), rgba(18, 20, 24, 0));
+  }
+
+  [x-cloak] {
+    display: none !important;
+  }
+
+  .htmx-indicator {
+    display: none;
+  }
+
+  .htmx-request .htmx-indicator,
+  .htmx-request.htmx-indicator {
+    display: inline-flex;
+  }
+}
+
+@layer components {
+  .card {
+    @apply rounded-2xl border border-black/5 bg-white/80 shadow-ink backdrop-blur;
+  }
+
+  .chip {
+    @apply inline-flex items-center gap-1 rounded-full border border-black/10 px-3 py-1 text-xs font-semibold uppercase tracking-widest;
+  }
+
+  .btn {
+    @apply inline-flex items-center justify-center gap-2 rounded-full px-5 py-2 text-sm font-semibold transition duration-200;
+  }
+
+  .btn-primary {
+    @apply btn bg-[rgb(var(--accent))] text-white shadow-glow hover:-translate-y-0.5 hover:shadow-ink;
+  }
+
+  .btn-ghost {
+    @apply btn border border-black/10 bg-white/70 text-[rgb(var(--ink))] hover:border-black/30;
+  }
+
+  .input {
+    @apply w-full rounded-xl border border-black/10 bg-white/80 px-4 py-2 text-sm focus:border-black/40 focus:outline-none;
+  }
+
+  .label {
+    @apply text-xs font-semibold uppercase tracking-widest text-[rgb(var(--muted))];
+  }
+
+  .tag {
+    @apply inline-flex items-center rounded-full border border-black/10 px-3 py-1 text-xs font-medium text-black/70;
+  }
+}
+
+@layer utilities {
+  .text-ink {
+    color: rgb(var(--ink));
+  }
+
+  .text-muted {
+    color: rgb(var(--muted));
+  }
+
+  .bg-ink {
+    background-color: rgb(var(--ink));
+  }
+
+  .bg-accent {
+    background-color: rgb(var(--accent));
+  }
+}

@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{{ title or "RBAC 管理台" }}</title>
+    <link rel="stylesheet" href="/static/css/app.css" />
+  </head>
+  <body class="antialiased">
+    <!-- 说明：本项目为前后端不分离的管理端演示，所有资源本地化。 -->
+    <div
+      id="app"
+      x-data="{ modalOpen: false }"
+      x-on:rbac-close.window="modalOpen = false"
+      x-on:keydown.escape.window="modalOpen = false"
+      class="relative"
+    >
+      {% if current_admin %}
+        <header class="sticky top-0 z-30 border-b border-black/10 bg-white/80 backdrop-blur">
+          <div class="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-3 px-4 py-4 md:px-8">
+            <div>
+              <p class="text-xs uppercase tracking-widest text-muted">Admin Console</p>
+              <p class="text-lg font-semibold text-ink">欢迎，{{ current_admin }}</p>
+            </div>
+            <nav class="flex flex-wrap gap-2 text-sm">
+              <a class="btn-ghost px-4" href="/admin/rbac">RBAC 权限</a>
+              <a class="btn-ghost px-4" href="/admin/users">管理员</a>
+              <a class="btn-ghost px-4" href="/admin/profile">个人资料</a>
+              <a class="btn-ghost px-4" href="/admin/password">修改密码</a>
+              <a class="btn-primary px-4" href="/admin/logout">退出</a>
+            </nav>
+          </div>
+        </header>
+      {% endif %}
+      {% block content %}{% endblock %}
+
+      <!-- 弹窗：用于新建/编辑 -->
+      <div
+        class="fixed inset-0 z-40 flex items-center justify-center bg-black/40 px-4"
+        x-show="modalOpen"
+        x-cloak
+      >
+        <div
+          class="card w-full max-w-2xl p-6 md:p-8"
+          x-on:click.outside="modalOpen = false"
+        >
+          <div id="modal-body">
+            <!-- 这里由 HTMX 注入表单 -->
+          </div>
+          <div id="modal-indicator" class="htmx-indicator mt-3 text-sm text-muted">
+            正在提交...
+          </div>
+        </div>
+      </div>
+
+      <!-- Toast 提示 -->
+      <div
+        id="toast"
+        data-variant="success"
+        class="pointer-events-none fixed right-6 top-6 z-50 w-72 rounded-2xl border border-black/10 bg-white/90 px-4 py-3 opacity-0 shadow-ink transition"
+      >
+        <div class="flex items-start gap-3">
+          <div class="h-2.5 w-2.5 rounded-full bg-accent"></div>
+          <div>
+            <p data-toast-title class="text-sm font-semibold text-ink">操作完成</p>
+            <p data-toast-message class="text-xs text-muted">已成功提交变更</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div
+      id="global-indicator"
+      class="htmx-indicator fixed bottom-6 right-6 z-40 rounded-full border border-black/10 bg-white/90 px-4 py-2 text-xs font-semibold text-muted shadow-ink"
+    >
+      正在处理...
+    </div>
+
+    <script src="/static/vendor/htmx.min.js" defer></script>
+    <script src="/static/vendor/alpine.js" defer></script>
+    <script src="/static/js/app.js" defer></script>
+  </body>
+</html>

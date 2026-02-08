@@ -1,0 +1,93 @@
+<div class="space-y-4">
+  <div class="flex items-start justify-between gap-4">
+    <div>
+      <h2 class="font-display text-2xl text-ink">
+        {% if mode == "edit" %}编辑 RBAC{% else %}新建 RBAC{% endif %}
+      </h2>
+      <p class="text-sm text-muted">请填写核心信息，保存后列表将自动刷新。</p>
+    </div>
+    <button class="btn-ghost px-3" x-on:click="modalOpen = false">关闭</button>
+  </div>
+
+  {% if errors %}
+    <div class="rounded-2xl border border-black/10 bg-white/70 p-3 text-sm text-red-600">
+      <p class="font-semibold">请修正以下问题：</p>
+      <ul class="mt-2 list-disc pl-5">
+        {% for err in errors %}
+          <li>{{ err }}</li>
+        {% endfor %}
+      </ul>
+    </div>
+  {% endif %}
+
+  <form
+    class="grid gap-4"
+    hx-post="{{ action }}"
+    hx-target="#rbac-table"
+    hx-swap="outerHTML"
+    hx-indicator="#modal-indicator"
+  >
+    <div class="grid gap-4 md:grid-cols-2">
+      <div>
+        <label class="label">角色标识</label>
+        <input name="role_key" class="input" required value="{{ form.role_key }}" />
+      </div>
+      <div>
+        <label class="label">角色名称</label>
+        <input name="role_name" class="input" required value="{{ form.role_name }}" />
+      </div>
+      <div>
+        <label class="label">资源</label>
+        <input name="resource" class="input" required value="{{ form.resource }}" />
+      </div>
+      <div>
+        <label class="label">动作</label>
+        <input name="action" class="input" required value="{{ form.action }}" />
+      </div>
+    </div>
+
+    <div class="grid gap-4 md:grid-cols-3">
+      <div>
+        <label class="label">优先级</label>
+        <select name="priority" class="input">
+          {% for value, label in priority_meta.items() %}
+            <option value="{{ value }}" {% if value == form.priority %}selected{% endif %}>
+              {{ label }}
+            </option>
+          {% endfor %}
+        </select>
+      </div>
+      <div>
+        <label class="label">状态</label>
+        <select name="status" class="input">
+          {% for key, meta in status_meta.items() %}
+            <option value="{{ key }}" {% if key == form.status %}selected{% endif %}>
+              {{ meta.label }}
+            </option>
+          {% endfor %}
+        </select>
+      </div>
+      <div>
+        <label class="label">负责人</label>
+        <input name="owner" class="input" required value="{{ form.owner }}" />
+      </div>
+    </div>
+
+    <div>
+      <label class="label">标签（逗号分隔）</label>
+      <input name="tags" class="input" value="{{ form.tags }}" />
+    </div>
+
+    <div>
+      <label class="label">描述</label>
+      <textarea name="description" class="input" rows="3">{{ form.description }}</textarea>
+    </div>
+
+    <div class="flex flex-wrap items-center justify-end gap-3 pt-2">
+      <button type="button" class="btn-ghost" x-on:click="modalOpen = false">取消</button>
+      <button type="submit" class="btn-primary">
+        {% if mode == "edit" %}保存修改{% else %}保存新建{% endif %}
+      </button>
+    </div>
+  </form>
+</div>

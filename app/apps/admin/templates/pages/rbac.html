@@ -21,26 +21,15 @@
         >
           新建角色
         </button>
-        {% if current_role %}
-          <button
-            class="btn-ghost"
-            hx-get="/admin/rbac/permissions/tree?role={{ current_role }}"
-            hx-target="#modal-body"
-            hx-swap="innerHTML"
-            x-on:click="modalOpen = true"
-          >
-            配置权限树
-          </button>
-        {% endif %}
       </div>
       <div class="rounded-2xl border border-black/10 bg-white/70 p-4 text-sm text-muted">
         <p class="font-semibold text-ink">提示</p>
-        <p>先创建角色，再配置权限树或新增单条权限。</p>
+        <p>权限树已内置在角色表单中，可在新建/编辑角色时一并配置。</p>
       </div>
     </div>
     <div class="card grid gap-4 p-6">
       <div>
-        <p class="label">权限条目</p>
+        <p class="label">角色数量</p>
         <p class="text-3xl font-semibold text-ink">{{ stats.total }}</p>
       </div>
       <div class="grid grid-cols-2 gap-4">
@@ -64,7 +53,7 @@
     </div>
   </header>
 
-  <section class="mt-10 grid gap-6 lg:grid-cols-[0.9fr_1.1fr]">
+  <section class="mt-10">
     <div class="card p-6">
       <div class="flex items-center justify-between">
         <h2 class="font-display text-2xl text-ink">角色列表</h2>
@@ -80,38 +69,6 @@
       </div>
       <div class="mt-4">
         {% include "partials/role_table.html" %}
-      </div>
-    </div>
-
-    <div class="card p-6">
-      <div class="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h2 class="font-display text-2xl text-ink">权限列表</h2>
-          <p class="text-sm text-muted">当前角色：{{ role_map.get(current_role, "-") }}</p>
-        </div>
-        <div class="flex flex-wrap gap-2">
-          <button
-            class="btn-primary"
-            hx-get="/admin/rbac/permissions/new?role={{ current_role }}"
-            hx-target="#modal-body"
-            hx-swap="innerHTML"
-            x-on:click="modalOpen = true"
-          >
-            新建权限
-          </button>
-          <button
-            class="btn-ghost"
-            hx-get="/admin/rbac/permissions/table?role={{ current_role }}"
-            hx-target="#permission-table"
-            hx-swap="outerHTML"
-            hx-indicator="#global-indicator"
-          >
-            刷新
-          </button>
-        </div>
-      </div>
-      <div class="mt-4">
-        {% include "partials/rbac_table.html" %}
       </div>
     </div>
   </section>

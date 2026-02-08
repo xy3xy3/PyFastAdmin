@@ -1,3 +1,5 @@
+{% from "partials/rbac_tree_form.html" import render_node %}
+
 <div class="space-y-4">
   <div class="flex items-start justify-between gap-4">
     <div>
@@ -55,6 +57,26 @@
       <div>
         <label class="label">描述</label>
         <input name="description" class="input" value="{{ form.description }}" />
+      </div>
+    </div>
+
+    <div class="rounded-2xl border border-black/10 bg-white/70 p-4" data-perm-scope>
+      <div class="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <p class="font-semibold text-ink">权限树</p>
+          <p class="text-xs text-muted">当前角色：{{ form.slug or "未填写" }}</p>
+        </div>
+        <div class="flex flex-wrap gap-2">
+          <button type="button" class="btn-ghost px-3" data-perm-action="all">全选</button>
+          <button type="button" class="btn-ghost px-3" data-perm-action="none">全不选</button>
+          <button type="button" class="btn-ghost px-3" data-perm-action="invert">反选</button>
+        </div>
+      </div>
+
+      <div class="mt-4 space-y-5">
+        {% for group in tree %}
+          {{ render_node(group, checked_map, action_labels) }}
+        {% endfor %}
       </div>
     </div>
 

@@ -39,4 +39,26 @@
       variant: "error",
     });
   });
+
+  document.addEventListener("click", (event) => {
+    const button = event.target.closest("[data-perm-action]");
+    if (!button) return;
+    const scope = button.closest("[data-perm-scope]") || document;
+    const checkboxes = scope.querySelectorAll(
+      'input[type="checkbox"][name^="perm_"]'
+    );
+    if (!checkboxes.length) return;
+    const action = button.dataset.permAction;
+    if (action === "all") {
+      checkboxes.forEach((item) => (item.checked = true));
+      return;
+    }
+    if (action === "none") {
+      checkboxes.forEach((item) => (item.checked = false));
+      return;
+    }
+    if (action === "invert") {
+      checkboxes.forEach((item) => (item.checked = !item.checked));
+    }
+  });
 })();

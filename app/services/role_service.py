@@ -28,6 +28,7 @@ async def create_role(payload: dict[str, Any]) -> Role:
         slug=payload["slug"],
         status=payload.get("status", "enabled"),
         description=payload.get("description", ""),
+        permissions=payload.get("permissions", []),
         updated_at=utc_now(),
     )
     await role.insert()
@@ -38,6 +39,8 @@ async def update_role(role: Role, payload: dict[str, Any]) -> Role:
     role.name = payload["name"]
     role.status = payload.get("status", role.status)
     role.description = payload.get("description", role.description)
+    if "permissions" in payload:
+        role.permissions = payload["permissions"]
     role.updated_at = utc_now()
     await role.save()
     return role

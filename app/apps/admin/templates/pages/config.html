@@ -1,23 +1,25 @@
 {% extends "base.html" %}
 
 {% block content %}
-<div class="mx-auto max-w-4xl px-4 pb-16 pt-10 md:px-8">
-  <div class="card p-6 md:p-8">
-    <div class="flex items-start justify-between gap-4">
-      <div>
-        <h1 class="font-display text-3xl text-ink">系统配置</h1>
-        <p class="mt-2 text-sm text-muted">示例：SMTP 邮件配置（可扩展更多配置）。</p>
-      </div>
-      <div class="chip">Config</div>
+<div class="space-y-4">
+  <section class="card p-5">
+    <div class="flex items-center justify-between gap-3">
+      <h1 class="text-lg font-semibold text-slate-900">系统配置</h1>
+      <p class="text-sm text-slate-500">配置 SMTP 参数与日志记录规则</p>
     </div>
 
     {% if saved %}
-      <div class="mt-4 rounded-2xl border border-black/10 bg-white/70 p-3 text-sm text-[rgb(var(--accent-cool))]">
+      <div class="mt-4 rounded-md border border-blue-100 bg-blue-50 px-3 py-2 text-sm text-blue-600">
         配置已保存。
       </div>
     {% endif %}
 
-    <form class="mt-6 grid gap-4" method="post" action="/admin/config">
+    <form class="mt-4 grid gap-5" method="post" action="/admin/config">
+      <div>
+        <h2 class="text-base font-semibold text-slate-900">SMTP 邮件配置</h2>
+        <p class="mt-1 text-sm text-slate-500">用于通知、告警或重置密码等邮件发送。</p>
+      </div>
+
       <div class="grid gap-4 md:grid-cols-2">
         <div>
           <label class="label">SMTP 主机</label>
@@ -44,8 +46,31 @@
           <input name="smtp_ssl" class="input" value="{{ smtp.smtp_ssl }}" />
         </div>
       </div>
-      <button type="submit" class="btn-primary">保存配置</button>
+
+      <div class="border-t border-slate-100 pt-5">
+        <h2 class="text-base font-semibold text-slate-900">日志记录类型</h2>
+        <p class="mt-1 text-sm text-slate-500">选择需要写入操作日志页面的增删改查类型。</p>
+
+        <div class="mt-3 grid gap-3 md:grid-cols-4">
+          {% for key, label in audit_action_labels.items() %}
+            <label class="flex items-center gap-2 rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700">
+              <input
+                type="checkbox"
+                name="audit_actions"
+                value="{{ key }}"
+                class="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+                {% if key in audit_actions %}checked{% endif %}
+              />
+              <span>{{ label }}</span>
+            </label>
+          {% endfor %}
+        </div>
+      </div>
+
+      <div class="flex justify-end">
+        <button type="submit" class="btn-primary">保存配置</button>
+      </div>
     </form>
-  </div>
+  </section>
 </div>
 {% endblock %}

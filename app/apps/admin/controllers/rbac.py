@@ -12,7 +12,7 @@ from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 
 from app.apps.admin.registry import ADMIN_TREE, iter_leaf_nodes
-from app.services import admin_user_service, role_service
+from app.services import admin_user_service, log_service, role_service
 
 BASE_DIR = Path(__file__).resolve().parents[1]
 TEMPLATES_DIR = BASE_DIR / "templates"
@@ -268,6 +268,13 @@ async def rbac_page(request: Request) -> HTMLResponse:
     context = await build_role_table_context(request, filters, page)
     context["action_labels"] = ACTION_LABELS
     context["role_sort_options"] = ROLE_SORT_OPTIONS
+    await log_service.record_request(
+        request,
+        action="read",
+        module="rbac",
+        target="角色与权限",
+        detail="访问 RBAC 角色列表页面",
+    )
     return templates.TemplateResponse("pages/rbac.html", context)
 
 
@@ -367,6 +374,14 @@ async def role_create(
     owner = request.session.get("admin_name") or "system"
     form["permissions"] = build_permissions(form_data, owner)
     await role_service.create_role(form)
+    await log_service.record_request(
+        request,
+        action="create",
+        module="rbac",
+        target=f"角色: {form['name']}",
+        target_id=form["slug"],
+        detail=f"创建角色 {form['slug']}",
+    )
     context = await build_role_table_context(request, filters, page)
     response = templates.TemplateResponse("partials/role_table.html", context)
     response.headers["HX-Trigger"] = json.dumps(
@@ -419,6 +434,14 @@ async def role_update(
     owner = request.session.get("admin_name") or "system"
     form["permissions"] = build_permissions(form_data, owner)
     await role_service.update_role(role, form)
+    await log_service.record_request(
+        request,
+        action="update",
+        module="rbac",
+        target=f"角色: {role.name}",
+        target_id=role.slug,
+        detail=f"更新角色 {role.slug}",
+    )
     context = await build_role_table_context(request, filters, page)
     response = templates.TemplateResponse("partials/role_table.html", context)
     response.headers["HX-Trigger"] = json.dumps(
@@ -440,6 +463,14 @@ async def role_delete(request: Request, slug: str) -> HTMLResponse:
         raise HTTPException(status_code=404, detail="角色不存在")
 
     await role_service.delete_role(role)
+    await log_service.record_request(
+        request,
+        action="delete",
+        module="rbac",
+        target=f"角色: {role.name}",
+        target_id=role.slug,
+        detail=f"删除角色 {role.slug}",
+    )
     context = await build_role_table_context(request, filters, page)
     response = templates.TemplateResponse("partials/role_table.html", context)
     response.headers["HX-Trigger"] = json.dumps(

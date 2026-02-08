@@ -62,6 +62,12 @@ ADMIN_TREE = [
                 "name": "系统配置",
                 "url": "/admin/config",
                 "actions": ["read", "update"],
+            },
+            {
+                "key": "operation_logs",
+                "name": "操作日志",
+                "url": "/admin/logs",
+                "actions": ["read"],
             }
         ],
     },

@@ -1,0 +1,112 @@
+<div id="logs-table" class="card p-5">
+  <div class="flex flex-wrap items-center justify-between gap-3">
+    <div>
+      <h2 class="text-lg font-semibold text-slate-900">操作日志</h2>
+      <p class="mt-1 text-sm text-slate-500">共 {{ pagination.total }} 条记录</p>
+    </div>
+
+    <button
+      class="btn-ghost"
+      hx-get="/admin/logs/table"
+      hx-target="#logs-table"
+      hx-swap="outerHTML"
+      hx-indicator="#global-indicator"
+      hx-vals='{{ {"search_q": filters.search_q, "search_action": filters.search_action, "search_module": filters.search_module, "search_sort": filters.search_sort, "page": pagination.page}|tojson }}'
+    >
+      刷新
+    </button>
+  </div>
+
+  {% if items %}
+    <div class="mt-4 overflow-x-auto rounded-lg border border-slate-200">
+      <table class="w-full min-w-[1150px] text-left text-sm">
+        <thead class="bg-slate-50 text-slate-600">
+          <tr>
+            <th class="px-4 py-3 font-medium">时间</th>
+            <th class="px-4 py-3 font-medium">操作</th>
+            <th class="px-4 py-3 font-medium">模块</th>
+            <th class="px-4 py-3 font-medium">对象</th>
+            <th class="px-4 py-3 font-medium">操作者</th>
+            <th class="px-4 py-3 font-medium">来源</th>
+            <th class="px-4 py-3 font-medium">明细</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for item in items %}
+            <tr class="border-t border-slate-100">
+              <td class="px-4 py-3 text-slate-500">{{ item.created_at | fmt_dt }}</td>
+              <td class="px-4 py-3">
+                {% if item.action == "create" %}
+                  <span class="tag" style="border-color: #2f855a; color: #2f855a;">{{ action_labels.get(item.action, item.action) }}</span>
+                {% elif item.action == "update" %}
+                  <span class="tag" style="border-color: #3182ce; color: #3182ce;">{{ action_labels.get(item.action, item.action) }}</span>
+                {% elif item.action == "delete" %}
+                  <span class="tag" style="border-color: #c53030; color: #c53030;">{{ action_labels.get(item.action, item.action) }}</span>
+                {% else %}
+                  <span class="tag" style="border-color: #718096; color: #718096;">{{ action_labels.get(item.action, item.action) }}</span>
+                {% endif %}
+              </td>
+              <td class="px-4 py-3 text-slate-600">{{ module_labels.get(item.module, item.module) }}</td>
+              <td class="px-4 py-3">
+                <div class="font-medium text-slate-900">{{ item.target or "-" }}</div>
+                <div class="text-xs text-slate-500">{{ item.target_id or "" }}</div>
+              </td>
+              <td class="px-4 py-3 text-slate-600">{{ item.operator or "system" }}</td>
+              <td class="px-4 py-3 text-xs text-slate-500">
+                <div>{{ item.ip or "-" }}</div>
+                <div class="mt-1">{{ item.method }} {{ item.path }}</div>
+              </td>
+              <td class="px-4 py-3 text-slate-600">{{ item.detail or "-" }}</td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  {% else %}
+    <div class="mt-4 rounded-lg border border-dashed border-slate-200 bg-slate-50/70 p-10 text-center">
+      <p class="text-lg font-semibold text-slate-800">暂无日志记录</p>
+      <p class="mt-2 text-sm text-slate-500">可在系统配置中开启需要记录的操作类型。</p>
+    </div>
+  {% endif %}
+
+  <div class="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-slate-100 pt-4">
+    <p class="text-xs text-slate-500">显示 {{ pagination.start_item }} - {{ pagination.end_item }} / {{ pagination.total }}</p>
+
+    <div class="flex flex-wrap items-center gap-2">
+      <button
+        class="btn-ghost px-3 {% if not pagination.has_prev %}opacity-50 pointer-events-none{% endif %}"
+        hx-get="/admin/logs/table"
+        hx-target="#logs-table"
+        hx-swap="outerHTML"
+        hx-indicator="#global-indicator"
+        hx-vals='{{ {"search_q": filters.search_q, "search_action": filters.search_action, "search_module": filters.search_module, "search_sort": filters.search_sort, "page": pagination.prev_page}|tojson }}'
+        {% if not pagination.has_prev %}disabled{% endif %}
+      >
+        上一页
+      </button>
+      {% for p in pagination.pages %}
+        <button
+          class="{% if p == pagination.page %}btn-primary{% else %}btn-ghost{% endif %} px-3"
+          hx-get="/admin/logs/table"
+          hx-target="#logs-table"
+          hx-swap="outerHTML"
+          hx-indicator="#global-indicator"
+          hx-vals='{{ {"search_q": filters.search_q, "search_action": filters.search_action, "search_module": filters.search_module, "search_sort": filters.search_sort, "page": p}|tojson }}'
+        >
+          {{ p }}
+        </button>
+      {% endfor %}
+      <button
+        class="btn-ghost px-3 {% if not pagination.has_next %}opacity-50 pointer-events-none{% endif %}"
+        hx-get="/admin/logs/table"
+        hx-target="#logs-table"
+        hx-swap="outerHTML"
+        hx-indicator="#global-indicator"
+        hx-vals='{{ {"search_q": filters.search_q, "search_action": filters.search_action, "search_module": filters.search_module, "search_sort": filters.search_sort, "page": pagination.next_page}|tojson }}'
+        {% if not pagination.has_next %}disabled{% endif %}
+      >
+        下一页
+      </button>
+    </div>
+  </div>
+</div>

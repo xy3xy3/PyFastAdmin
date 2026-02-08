@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterable
+
 from app.models import ConfigItem
 from app.models.config_item import utc_now
 
@@ -23,6 +25,25 @@ SMTP_META = {
     "smtp_ssl": "启用 SSL (true/false)",
 }
 
+AUDIT_ACTION_ORDER = ["create", "read", "update", "delete"]
+AUDIT_ACTION_LABELS = {
+    "create": "新增",
+    "read": "查询",
+    "update": "修改",
+    "delete": "删除",
+}
+AUDIT_DEFAULT_ACTIONS = ["create", "update", "delete"]
+AUDIT_CONFIG_KEY = "audit_log_actions"
+
+
+async def find_config_item(group: str, key: str) -> ConfigItem | None:
+    return await ConfigItem.find_one({"group": group, "key": key})
+
+
+def normalize_audit_actions(actions: Iterable[str]) -> list[str]:
+    selected = {str(item).strip().lower() for item in actions if str(item).strip()}
+    return [item for item in AUDIT_ACTION_ORDER if item in selected]
+
 
 async def get_smtp_config() -> dict[str, str]:
     items = await ConfigItem.find(ConfigItem.group == "smtp").to_list()
@@ -34,9 +55,7 @@ async def get_smtp_config() -> dict[str, str]:
 async def save_smtp_config(payload: dict[str, str]) -> None:
     for key, name in SMTP_META.items():
         value = payload.get(key, "").strip()
-        item = await ConfigItem.find_one(
-            (ConfigItem.group == "smtp") & (ConfigItem.key == key)
-        )
+        item = await find_config_item("smtp", key)
         if item:
             item.value = value
             item.name = name
@@ -51,3 +70,34 @@ async def save_smtp_config(payload: dict[str, str]) -> None:
                 description="SMTP 配置",
                 updated_at=utc_now(),
             ).insert()
+
+
+async def get_audit_log_actions() -> list[str]:
+    item = await find_config_item("audit", AUDIT_CONFIG_KEY)
+    if not item:
+        return AUDIT_DEFAULT_ACTIONS.copy()
+    if not item.value.strip():
+        return []
+    return normalize_audit_actions(item.value.split(","))
+
+
+async def save_audit_log_actions(actions: list[str]) -> list[str]:
+    normalized = normalize_audit_actions(actions)
+    value = ",".join(normalized)
+    item = await find_config_item("audit", AUDIT_CONFIG_KEY)
+    if item:
+        item.value = value
+        item.name = "操作日志记录类型"
+        item.description = "用于控制日志系统记录的操作类型"
+        item.updated_at = utc_now()
+        await item.save()
+    else:
+        await ConfigItem(
+            key=AUDIT_CONFIG_KEY,
+            name="操作日志记录类型",
+            value=value,
+            group="audit",
+            description="用于控制日志系统记录的操作类型",
+            updated_at=utc_now(),
+        ).insert()
+    return normalized

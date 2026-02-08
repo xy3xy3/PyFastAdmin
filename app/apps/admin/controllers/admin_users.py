@@ -12,7 +12,7 @@ from fastapi import APIRouter, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
 
-from app.services import admin_user_service, auth_service, role_service
+from app.services import admin_user_service, auth_service, log_service, role_service
 
 BASE_DIR = Path(__file__).resolve().parents[1]
 TEMPLATES_DIR = BASE_DIR / "templates"
@@ -199,6 +199,13 @@ async def admin_users_page(request: Request) -> HTMLResponse:
     filters, page = parse_admin_filters(request.query_params)
     context = await build_admin_table_context(request, filters, page)
     context["admin_sort_options"] = ADMIN_SORT_OPTIONS
+    await log_service.record_request(
+        request,
+        action="read",
+        module="admin_users",
+        target="管理员账号",
+        detail="访问管理员管理页面",
+    )
     return templates.TemplateResponse("pages/admin_users.html", context)
 
 
@@ -314,7 +321,15 @@ async def admin_users_create(
         "status": form["status"],
         "password_hash": auth_service.hash_password(form["password"]),
     }
-    await admin_user_service.create_admin(payload)
+    created = await admin_user_service.create_admin(payload)
+    await log_service.record_request(
+        request,
+        action="create",
+        module="admin_users",
+        target=f"管理员: {created.display_name}",
+        target_id=str(created.id),
+        detail=f"创建管理员账号 {created.username}",
+    )
 
     context = await build_admin_table_context(request, filters, page)
     response = templates.TemplateResponse("partials/admin_users_table.html", context)
@@ -386,6 +401,14 @@ async def admin_users_update(
         "password_hash": auth_service.hash_password(form["password"]) if form["password"] else "",
     }
     await admin_user_service.update_admin(item, payload)
+    await log_service.record_request(
+        request,
+        action="update",
+        module="admin_users",
+        target=f"管理员: {item.display_name}",
+        target_id=str(item.id),
+        detail=f"更新管理员账号 {item.username}",
+    )
     if str(item.id) == str(request.session.get("admin_id")):
         request.session["admin_name"] = item.display_name
 
@@ -417,6 +440,14 @@ async def admin_users_delete(request: Request, item_id: PydanticObjectId) -> HTM
         raise HTTPException(status_code=400, detail="不能删除当前登录账号")
 
     await admin_user_service.delete_admin(item)
+    await log_service.record_request(
+        request,
+        action="delete",
+        module="admin_users",
+        target=f"管理员: {item.display_name}",
+        target_id=str(item.id),
+        detail=f"删除管理员账号 {item.username}",
+    )
     context = await build_admin_table_context(request, filters, page)
     response = templates.TemplateResponse("partials/admin_users_table.html", context)
     response.headers["HX-Trigger"] = json.dumps(

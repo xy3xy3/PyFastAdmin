@@ -19,7 +19,7 @@
         "collapsedMenuOpen": "",
         "menuOpen": {
           "security": path.startswith("/admin/rbac") or path.startswith("/admin/users"),
-          "profile": path.startswith("/admin/profile") or path.startswith("/admin/password") or path.startswith("/admin/config"),
+          "profile": path.startswith("/admin/profile") or path.startswith("/admin/password") or path.startswith("/admin/config") or path.startswith("/admin/logs"),
         },
       }|tojson }}'
       x-init="desktopCollapsed = window.matchMedia('(min-width: 768px)').matches ? JSON.parse(localStorage.getItem('adminSidebarCollapsed') || 'false') : false; $watch('desktopCollapsed', value => localStorage.setItem('adminSidebarCollapsed', JSON.stringify(value)))"
@@ -48,6 +48,9 @@
         {% elif path.startswith('/admin/config') %}
           {% set crumb_parent = "系统设置" %}
           {% set crumb_title = "系统配置" %}
+        {% elif path.startswith('/admin/logs') %}
+          {% set crumb_parent = "系统设置" %}
+          {% set crumb_title = "操作日志" %}
         {% endif %}
 
         <div class="admin-shell" :class="{ 'admin-shell-collapsed': desktopCollapsed }">
@@ -124,6 +127,10 @@
                     <i class="fa-solid fa-gears sider-icon"></i>
                     系统配置
                   </a>
+                  <a class="sider-link {% if path.startswith('/admin/logs') %}sider-link-active{% endif %}" href="/admin/logs" x-on:click="mobileSidebarOpen = false">
+                    <i class="fa-solid fa-file-lines sider-icon"></i>
+                    操作日志
+                  </a>
                 </div>
               </div>
 
@@ -155,7 +162,7 @@
                 <div class="compact-item" x-on:mouseenter="collapsedMenuOpen = 'profile'" x-on:click.outside="collapsedMenuOpen = ''">
                   <button
                     type="button"
-                    class="compact-trigger {% if path.startswith('/admin/profile') or path.startswith('/admin/password') or path.startswith('/admin/config') %}compact-link-active{% endif %}"
+                    class="compact-trigger {% if path.startswith('/admin/profile') or path.startswith('/admin/password') or path.startswith('/admin/config') or path.startswith('/admin/logs') %}compact-link-active{% endif %}"
                     title="个人设置"
                     x-on:click="if (collapsedMenuOpen === 'profile') { collapsedMenuOpen = '' } else { collapsedMenuOpen = 'profile' }"
                   >
@@ -171,6 +178,9 @@
                     </a>
                     <a class="compact-flyout-link {% if path.startswith('/admin/config') %}compact-flyout-link-active{% endif %}" href="/admin/config" x-on:click="collapsedMenuOpen = ''">
                       系统配置
+                    </a>
+                    <a class="compact-flyout-link {% if path.startswith('/admin/logs') %}compact-flyout-link-active{% endif %}" href="/admin/logs" x-on:click="collapsedMenuOpen = ''">
+                      操作日志
                     </a>
                   </div>
                 </div>

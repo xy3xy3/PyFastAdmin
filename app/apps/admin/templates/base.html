@@ -16,6 +16,7 @@
         "mobileSidebarOpen": False,
         "desktopCollapsed": False,
         "userMenuOpen": False,
+        "collapsedMenuOpen": "",
         "menuOpen": {
           "security": path.startswith("/admin/rbac") or path.startswith("/admin/users"),
           "profile": path.startswith("/admin/profile") or path.startswith("/admin/password") or path.startswith("/admin/config"),
@@ -23,13 +24,16 @@
       }|tojson }}'
       x-init="desktopCollapsed = window.matchMedia('(min-width: 768px)').matches ? JSON.parse(localStorage.getItem('adminSidebarCollapsed') || 'false') : false; $watch('desktopCollapsed', value => localStorage.setItem('adminSidebarCollapsed', JSON.stringify(value)))"
       x-on:rbac-close.window="modalOpen = false"
-      x-on:keydown.escape.window="modalOpen = false; mobileSidebarOpen = false; userMenuOpen = false"
+      x-on:keydown.escape.window="modalOpen = false; mobileSidebarOpen = false; userMenuOpen = false; collapsedMenuOpen = ''"
       class="relative"
     >
       {% if current_admin %}
-        {% set crumb_parent = "控制台" %}
-        {% set crumb_title = "首页" %}
-        {% if path.startswith('/admin/rbac') %}
+        {% set crumb_parent = "" %}
+        {% set crumb_title = "仪表盘" %}
+        {% if path.startswith('/admin/dashboard') %}
+          {% set crumb_parent = "" %}
+          {% set crumb_title = "仪表盘" %}
+        {% elif path.startswith('/admin/rbac') %}
           {% set crumb_parent = "权限管理" %}
           {% set crumb_title = "RBAC 权限" %}
         {% elif path.startswith('/admin/users') %}
@@ -53,7 +57,7 @@
             <button
               type="button"
               class="admin-collapse-trigger desktop-only"
-              x-on:click="desktopCollapsed = !desktopCollapsed"
+              x-on:click="desktopCollapsed = !desktopCollapsed; if (!desktopCollapsed) { collapsedMenuOpen = '' }"
               :aria-label="desktopCollapsed ? '展开侧边栏' : '折叠侧边栏'"
             >
               <i class="fa-solid" :class="desktopCollapsed ? 'fa-angle-right' : 'fa-angle-left'"></i>
@@ -75,8 +79,13 @@
               </button>
             </div>
 
-            <nav class="admin-nav">
+            <nav class="admin-nav" :class="{ 'admin-nav-collapsed': desktopCollapsed && !mobileSidebarOpen }">
               <div x-show="!desktopCollapsed || mobileSidebarOpen" x-cloak>
+                <a class="sider-link sider-dashboard-link {% if path.startswith('/admin/dashboard') %}sider-link-active{% endif %}" href="/admin/dashboard" x-on:click="mobileSidebarOpen = false">
+                  <i class="fa-solid fa-gauge-high sider-icon"></i>
+                  仪表盘
+                </a>
+
                 <button type="button" class="sider-parent" x-on:click="menuOpen.security = !menuOpen.security">
                   <span class="sider-parent-main">
                     <i class="fa-solid fa-folder-tree sider-icon"></i>
@@ -119,21 +128,52 @@
               </div>
 
               <div class="compact-nav" x-show="desktopCollapsed && !mobileSidebarOpen" x-cloak>
-                <a class="compact-link {% if path.startswith('/admin/rbac') %}compact-link-active{% endif %}" href="/admin/rbac" title="RBAC 权限">
-                  <i class="fa-solid fa-user-shield"></i>
+                <a class="compact-link {% if path.startswith('/admin/dashboard') %}compact-link-active{% endif %}" href="/admin/dashboard" title="仪表盘" x-on:click="collapsedMenuOpen = ''">
+                  <i class="fa-solid fa-gauge-high"></i>
                 </a>
-                <a class="compact-link {% if path.startswith('/admin/users') %}compact-link-active{% endif %}" href="/admin/users" title="管理员管理">
-                  <i class="fa-solid fa-users-gear"></i>
-                </a>
-                <a class="compact-link {% if path.startswith('/admin/profile') %}compact-link-active{% endif %}" href="/admin/profile" title="个人资料">
-                  <i class="fa-regular fa-id-card"></i>
-                </a>
-                <a class="compact-link {% if path.startswith('/admin/password') %}compact-link-active{% endif %}" href="/admin/password" title="修改密码">
-                  <i class="fa-solid fa-key"></i>
-                </a>
-                <a class="compact-link {% if path.startswith('/admin/config') %}compact-link-active{% endif %}" href="/admin/config" title="系统配置">
-                  <i class="fa-solid fa-gears"></i>
-                </a>
+
+                <div class="compact-item" x-on:mouseenter="collapsedMenuOpen = 'security'" x-on:click.outside="collapsedMenuOpen = ''">
+                  <button
+                    type="button"
+                    class="compact-trigger {% if path.startswith('/admin/rbac') or path.startswith('/admin/users') %}compact-link-active{% endif %}"
+                    title="权限管理"
+                    x-on:click="if (collapsedMenuOpen === 'security') { collapsedMenuOpen = '' } else { collapsedMenuOpen = 'security' }"
+                  >
+                    <i class="fa-solid fa-folder-tree"></i>
+                  </button>
+
+                  <div class="compact-flyout" x-show="collapsedMenuOpen === 'security'" x-cloak>
+                    <a class="compact-flyout-link {% if path.startswith('/admin/rbac') %}compact-flyout-link-active{% endif %}" href="/admin/rbac" x-on:click="collapsedMenuOpen = ''">
+                      RBAC 权限
+                    </a>
+                    <a class="compact-flyout-link {% if path.startswith('/admin/users') %}compact-flyout-link-active{% endif %}" href="/admin/users" x-on:click="collapsedMenuOpen = ''">
+                      管理员管理
+                    </a>
+                  </div>
+                </div>
+
+                <div class="compact-item" x-on:mouseenter="collapsedMenuOpen = 'profile'" x-on:click.outside="collapsedMenuOpen = ''">
+                  <button
+                    type="button"
+                    class="compact-trigger {% if path.startswith('/admin/profile') or path.startswith('/admin/password') or path.startswith('/admin/config') %}compact-link-active{% endif %}"
+                    title="个人设置"
+                    x-on:click="if (collapsedMenuOpen === 'profile') { collapsedMenuOpen = '' } else { collapsedMenuOpen = 'profile' }"
+                  >
+                    <i class="fa-regular fa-user"></i>
+                  </button>
+
+                  <div class="compact-flyout" x-show="collapsedMenuOpen === 'profile'" x-cloak>
+                    <a class="compact-flyout-link {% if path.startswith('/admin/profile') %}compact-flyout-link-active{% endif %}" href="/admin/profile" x-on:click="collapsedMenuOpen = ''">
+                      个人资料
+                    </a>
+                    <a class="compact-flyout-link {% if path.startswith('/admin/password') %}compact-flyout-link-active{% endif %}" href="/admin/password" x-on:click="collapsedMenuOpen = ''">
+                      修改密码
+                    </a>
+                    <a class="compact-flyout-link {% if path.startswith('/admin/config') %}compact-flyout-link-active{% endif %}" href="/admin/config" x-on:click="collapsedMenuOpen = ''">
+                      系统配置
+                    </a>
+                  </div>
+                </div>
               </div>
             </nav>
           </aside>
@@ -153,10 +193,10 @@
                 <div>
                   <p class="text-xs uppercase tracking-wider text-slate-400">ADMIN CONSOLE</p>
                   <div class="breadcrumb">
-                    <span class="breadcrumb-muted">首页</span>
-                    <span class="breadcrumb-sep">/</span>
-                    <span class="breadcrumb-muted">{{ crumb_parent }}</span>
-                    <span class="breadcrumb-sep">/</span>
+                    {% if crumb_parent %}
+                      <span class="breadcrumb-muted">{{ crumb_parent }}</span>
+                      <span class="breadcrumb-sep">/</span>
+                    {% endif %}
                     <span class="breadcrumb-current">{{ crumb_title }}</span>
                   </div>
                 </div>
@@ -187,6 +227,14 @@
                     >
                       <i class="fa-regular fa-id-card"></i>
                       个人资料
+                    </a>
+                    <a
+                      class="flex items-center gap-2 rounded-md px-3 py-2 text-sm text-slate-600 hover:bg-blue-50 hover:text-blue-600"
+                      href="/admin/password"
+                      x-on:click="userMenuOpen = false"
+                    >
+                      <i class="fa-solid fa-key"></i>
+                      修改密码
                     </a>
                     <a
                       class="flex items-center gap-2 rounded-md px-3 py-2 text-sm text-slate-600 hover:bg-blue-50 hover:text-blue-600"

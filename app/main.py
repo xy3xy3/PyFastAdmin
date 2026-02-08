@@ -33,7 +33,7 @@ app.include_router(config_router)
 
 @app.get("/")
 async def root() -> RedirectResponse:
-    return RedirectResponse(url="/admin/rbac", status_code=302)
+    return RedirectResponse(url="/admin/dashboard", status_code=302)
 
 
 @app.on_event("startup")

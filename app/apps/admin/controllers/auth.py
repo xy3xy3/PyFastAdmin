@@ -27,7 +27,7 @@ def base_context(request: Request) -> dict[str, Any]:
 
 @router.get("/login", response_class=HTMLResponse)
 async def login_page(request: Request, next: str | None = None) -> HTMLResponse:
-    context = {"request": request, "next": next or "/admin/rbac", "error": ""}
+    context = {"request": request, "next": next or "/admin/dashboard", "error": ""}
     return templates.TemplateResponse("pages/login.html", context)
 
 
@@ -36,7 +36,7 @@ async def login_action(
     request: Request,
     username: str = Form(""),
     password: str = Form(""),
-    next: str = Form("/admin/rbac"),
+    next: str = Form("/admin/dashboard"),
 ) -> HTMLResponse:
     admin = await auth_service.authenticate(username.strip(), password)
     if not admin:
@@ -49,7 +49,7 @@ async def login_action(
 
     request.session["admin_id"] = str(admin.id)
     request.session["admin_name"] = admin.display_name
-    return RedirectResponse(url=next or "/admin/rbac", status_code=302)
+    return RedirectResponse(url=next or "/admin/dashboard", status_code=302)
 
 
 @router.get("/logout")

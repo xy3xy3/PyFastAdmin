@@ -12,7 +12,7 @@ from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 
 from app.apps.admin.registry import ADMIN_TREE, iter_leaf_nodes
-from app.services import role_service
+from app.services import admin_user_service, role_service
 
 BASE_DIR = Path(__file__).resolve().parents[1]
 TEMPLATES_DIR = BASE_DIR / "templates"
@@ -238,7 +238,28 @@ def role_errors(values: dict[str, Any]) -> list[str]:
 
 @router.get("/", response_class=HTMLResponse)
 async def admin_root() -> RedirectResponse:
-    return RedirectResponse(url="/admin/rbac", status_code=302)
+    return RedirectResponse(url="/admin/dashboard", status_code=302)
+
+
+@router.get("/dashboard", response_class=HTMLResponse)
+async def dashboard_page(request: Request) -> HTMLResponse:
+    roles = await role_service.list_roles()
+    admins = await admin_user_service.list_admins()
+    dashboard = {
+        "role_total": len(roles),
+        "role_enabled": sum(1 for item in roles if item.status == "enabled"),
+        "role_disabled": sum(1 for item in roles if item.status == "disabled"),
+        "admin_total": len(admins),
+        "admin_enabled": sum(1 for item in admins if item.status == "enabled"),
+        "admin_disabled": sum(1 for item in admins if item.status == "disabled"),
+        "latest_role": fmt_dt(roles[0].updated_at) if roles else "暂无",
+        "latest_admin": fmt_dt(admins[0].updated_at) if admins else "暂无",
+    }
+    context = {
+        **base_context(request),
+        "dashboard": dashboard,
+    }
+    return templates.TemplateResponse("pages/dashboard.html", context)
 
 
 @router.get("/rbac", response_class=HTMLResponse)

@@ -6,6 +6,18 @@ from typing import Iterable
 
 ADMIN_TREE = [
     {
+        "key": "dashboard",
+        "name": "首页",
+        "children": [
+            {
+                "key": "dashboard_home",
+                "name": "仪表盘",
+                "url": "/admin/dashboard",
+                "actions": ["read"],
+            }
+        ],
+    },
+    {
         "key": "security",
         "name": "权限与安全",
         "children": [

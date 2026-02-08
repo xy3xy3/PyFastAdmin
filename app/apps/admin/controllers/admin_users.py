@@ -211,7 +211,14 @@ async def admin_users_create(
     }
     response = templates.TemplateResponse("partials/admin_users_table.html", context)
     response.headers["HX-Trigger"] = json.dumps(
-        {"admin-toast": {"title": "已创建", "message": "管理员账号已保存"}, "rbac-close": True},
+        {
+            "admin-toast": {
+                "title": "已创建",
+                "message": "管理员账号已保存",
+                "variant": "success",
+            },
+            "rbac-close": True,
+        },
         ensure_ascii=True,
     )
     return response
@@ -280,7 +287,14 @@ async def admin_users_update(
     }
     response = templates.TemplateResponse("partials/admin_users_table.html", context)
     response.headers["HX-Trigger"] = json.dumps(
-        {"admin-toast": {"title": "已更新", "message": "管理员账号已修改"}, "rbac-close": True},
+        {
+            "admin-toast": {
+                "title": "已更新",
+                "message": "管理员账号已修改",
+                "variant": "success",
+            },
+            "rbac-close": True,
+        },
         ensure_ascii=True,
     )
     return response
@@ -307,7 +321,13 @@ async def admin_users_delete(request: Request, item_id: PydanticObjectId) -> HTM
     }
     response = templates.TemplateResponse("partials/admin_users_table.html", context)
     response.headers["HX-Trigger"] = json.dumps(
-        {"admin-toast": {"title": "已删除", "message": "管理员账号已移除"}},
+        {
+            "admin-toast": {
+                "title": "已删除",
+                "message": "管理员账号已移除",
+                "variant": "warning",
+            }
+        },
         ensure_ascii=True,
     )
     return response

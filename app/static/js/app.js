@@ -6,11 +6,20 @@
 
   let toastTimer = null;
 
+  const normalizeVariant = (variant) => {
+    if (!variant) return "success";
+    const value = String(variant).toLowerCase();
+    if (["warn", "warning"].includes(value)) return "warning";
+    if (["error", "danger", "fail", "failure"].includes(value)) return "error";
+    if (["success", "ok", "done"].includes(value)) return "success";
+    return "success";
+  };
+
   const showToast = (detail = {}) => {
     if (!toastEl) return;
     const { title = "操作完成", message = "已成功提交变更", variant = "success" } = detail;
 
-    toastEl.dataset.variant = variant;
+    toastEl.dataset.variant = normalizeVariant(variant);
     if (titleEl) titleEl.textContent = title;
     if (messageEl) messageEl.textContent = message;
 

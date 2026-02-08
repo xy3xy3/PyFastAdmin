@@ -224,7 +224,10 @@ async def role_create(
     context = {**base_context(request), "roles": roles, "status_meta": STATUS_META}
     response = templates.TemplateResponse("partials/role_table.html", context)
     response.headers["HX-Trigger"] = json.dumps(
-        {"rbac-toast": {"title": "已创建", "message": "角色已保存"}, "rbac-close": True},
+        {
+            "rbac-toast": {"title": "已创建", "message": "角色已保存", "variant": "success"},
+            "rbac-close": True,
+        },
         ensure_ascii=True,
     )
     return response
@@ -270,7 +273,10 @@ async def role_update(
     context = {**base_context(request), "roles": roles, "status_meta": STATUS_META}
     response = templates.TemplateResponse("partials/role_table.html", context)
     response.headers["HX-Trigger"] = json.dumps(
-        {"rbac-toast": {"title": "已更新", "message": "角色已修改"}, "rbac-close": True},
+        {
+            "rbac-toast": {"title": "已更新", "message": "角色已修改", "variant": "success"},
+            "rbac-close": True,
+        },
         ensure_ascii=True,
     )
     return response
@@ -287,7 +293,7 @@ async def role_delete(request: Request, slug: str) -> HTMLResponse:
     context = {**base_context(request), "roles": roles, "status_meta": STATUS_META}
     response = templates.TemplateResponse("partials/role_table.html", context)
     response.headers["HX-Trigger"] = json.dumps(
-        {"rbac-toast": {"title": "已删除", "message": "角色已移除"}},
+        {"rbac-toast": {"title": "已删除", "message": "角色已移除", "variant": "warning"}},
         ensure_ascii=True,
     )
     return response

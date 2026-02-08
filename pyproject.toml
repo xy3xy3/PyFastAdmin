@@ -15,8 +15,9 @@ dependencies = [
   "motor>=3.4",
   "python-dotenv>=1.0",
   "pydantic>=2.7",
-  "passlib[bcrypt]>=1.7.4",
+  "passlib>=1.7.4",
   "python-multipart>=0.0.9",
+  "itsdangerous>=2.2.0",
 ]
 
 [project.urls]

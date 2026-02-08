@@ -42,7 +42,7 @@ uv sync
 4. 启动服务
 
 ```bash
-uvicorn app.main:app --reload --port ${APP_PORT:-8000}
+uv run uvicorn app.main:app --reload --port ${APP_PORT:-8000}
 ```
 
 访问：http://localhost:8000/admin/rbac

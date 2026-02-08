@@ -10,7 +10,7 @@ from app.models import AdminUser
 from app.models.admin_user import utc_now
 from app.services.admin_user_service import create_admin, get_admin_by_username
 
-_pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+_pwd_context = CryptContext(schemes=["pbkdf2_sha256"], deprecated="auto")
 
 
 def hash_password(raw: str) -> str:

@@ -21,8 +21,8 @@ BASE_DIR = Path(__file__).resolve().parent
 
 app = FastAPI(title=APP_NAME)
 app.mount("/static", StaticFiles(directory=BASE_DIR / "static"), name="static")
+app.add_middleware(AdminAuthMiddleware, exempt_paths={"/admin/logout"})
 app.add_middleware(SessionMiddleware, secret_key=SECRET_KEY, session_cookie="pfa_session")
-app.add_middleware(AdminAuthMiddleware, exempt_paths={\"/admin/logout\"})
 app.include_router(admin_router)
 app.include_router(auth_router)
 app.include_router(admin_users_router)

@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Iterator
 
 import pytest
+from dotenv import load_dotenv
 from pymongo import MongoClient
 from pymongo.errors import OperationFailure, PyMongoError
 
@@ -15,6 +16,9 @@ from pymongo.errors import OperationFailure, PyMongoError
 ROOT_DIR = Path(__file__).resolve().parents[1]
 if str(ROOT_DIR) not in sys.path:
     sys.path.insert(0, str(ROOT_DIR))
+
+# Load project .env for local test runs so TEST_MONGO_URL can follow dev compose settings.
+load_dotenv(ROOT_DIR / ".env")
 
 
 @pytest.fixture(scope="session")

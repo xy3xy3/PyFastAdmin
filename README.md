@@ -61,12 +61,16 @@ uv run uvicorn app.main:app --reload --port ${APP_PORT:-8000}
 
 > 测试会使用 **独立 MongoDB 数据库**，不污染主库。
 
-1. 设置测试库（建议写入 `.env` 或 shell 环境）
+1. 设置测试库（推荐直接复用 `.env`，避免连到错误 MongoDB 端口）
 
 ```bash
-export TEST_MONGO_URL=${MONGO_URL:-mongodb://localhost:27017}
-export TEST_MONGO_DB=pyfastadmin_test
-export TEST_E2E_MONGO_DB=pyfastadmin_e2e_test
+set -a
+source .env
+set +a
+
+# 可选：覆盖为专用测试库
+export TEST_MONGO_DB=${TEST_MONGO_DB:-pyfastadmin_test}
+export TEST_E2E_MONGO_DB=${TEST_E2E_MONGO_DB:-pyfastadmin_e2e_test}
 ```
 
 2. 安装测试依赖（已通过 `uv add --dev` 管理）

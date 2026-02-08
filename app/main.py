@@ -17,6 +17,7 @@ from .config import APP_NAME, SECRET_KEY
 from .db import close_db, init_db
 from .middleware.auth import AdminAuthMiddleware
 from .services.auth_service import ensure_default_admin
+from .services.role_service import ensure_default_roles
 
 BASE_DIR = Path(__file__).resolve().parent
 
@@ -39,6 +40,7 @@ async def root() -> RedirectResponse:
 async def on_startup() -> None:
     # 启动时初始化数据库
     await init_db()
+    await ensure_default_roles()
     await ensure_default_admin()
 
 

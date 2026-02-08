@@ -6,40 +6,41 @@
     <div class="space-y-5">
       <div class="chip">RBAC 控制台</div>
       <h1 class="font-display text-4xl leading-tight md:text-5xl">
-        用更清晰的视角管理你的 <span class="text-[rgb(var(--accent))]">RBAC</span> 权限
+        用更清晰的视角管理你的 <span class="text-[rgb(var(--accent))]">角色权限</span>
       </h1>
       <p class="text-base text-muted md:text-lg">
-        这是一个不分离的管理后台示例，聚焦于移动端与桌面端的统一体验。
+        角色与权限分离管理，权限支持树形配置。
       </p>
       <div class="flex flex-wrap gap-3">
         <button
           class="btn-primary"
-          hx-get="/admin/rbac/new"
+          hx-get="/admin/rbac/roles/new"
           hx-target="#modal-body"
           hx-swap="innerHTML"
           x-on:click="modalOpen = true"
         >
-          新建 RBAC
+          新建角色
         </button>
-        <a class="btn-ghost" href="/admin/rbac/permissions">权限树配置</a>
-        <button
-          class="btn-ghost"
-          hx-get="/admin/rbac/table"
-          hx-target="#rbac-table"
-          hx-swap="outerHTML"
-          hx-indicator="#global-indicator"
-        >
-          刷新列表
-        </button>
+        {% if current_role %}
+          <button
+            class="btn-ghost"
+            hx-get="/admin/rbac/permissions/tree?role={{ current_role }}"
+            hx-target="#modal-body"
+            hx-swap="innerHTML"
+            x-on:click="modalOpen = true"
+          >
+            配置权限树
+          </button>
+        {% endif %}
       </div>
       <div class="rounded-2xl border border-black/10 bg-white/70 p-4 text-sm text-muted">
         <p class="font-semibold text-ink">提示</p>
-        <p>列表的增删改查通过 HTMX 完成，页面无需整体刷新。</p>
+        <p>先创建角色，再配置权限树或新增单条权限。</p>
       </div>
     </div>
     <div class="card grid gap-4 p-6">
       <div>
-        <p class="label">总量</p>
+        <p class="label">权限条目</p>
         <p class="text-3xl font-semibold text-ink">{{ stats.total }}</p>
       </div>
       <div class="grid grid-cols-2 gap-4">
@@ -52,48 +53,67 @@
           <p class="text-xl font-semibold text-ink">{{ stats.disabled }}</p>
         </div>
         <div>
-          <p class="label">归档</p>
-          <p class="text-xl font-semibold text-ink">{{ stats.archived }}</p>
-        </div>
-        <div>
           <p class="label">最后更新</p>
           <p class="text-sm text-muted">{{ stats.latest or "暂无" }}</p>
         </div>
       </div>
       <div class="rounded-2xl border border-black/10 bg-white/70 p-4 text-sm text-muted">
         <p class="font-semibold text-ink">说明</p>
-        <p>数据存储在 MongoDB，模型由 Beanie 管理。</p>
+        <p>资源与动作可通过树形快速授权。</p>
       </div>
     </div>
   </header>
 
-  <section class="mt-10 card p-6">
-    <div class="flex flex-wrap items-center justify-between gap-4">
-      <div class="flex-1 min-w-[220px]">
-        <label class="label" for="search">快速搜索</label>
-        <input
-          id="search"
-          name="q"
-          class="input"
-          placeholder="输入角色/资源/动作/负责人"
-          hx-get="/admin/rbac/table"
-          hx-trigger="keyup changed delay:400ms, search"
-          hx-target="#rbac-table"
+  <section class="mt-10 grid gap-6 lg:grid-cols-[0.9fr_1.1fr]">
+    <div class="card p-6">
+      <div class="flex items-center justify-between">
+        <h2 class="font-display text-2xl text-ink">角色列表</h2>
+        <button
+          class="btn-ghost"
+          hx-get="/admin/rbac/roles/table"
+          hx-target="#role-table"
           hx-swap="outerHTML"
           hx-indicator="#global-indicator"
-        />
+        >
+          刷新
+        </button>
       </div>
-      <div class="flex flex-wrap gap-2">
-        <div class="chip">移动优先</div>
-        <div class="chip">HTMX</div>
-        <div class="chip">Alpine</div>
-        <div class="chip">Tailwind</div>
+      <div class="mt-4">
+        {% include "partials/role_table.html" %}
       </div>
     </div>
-  </section>
 
-  <section class="mt-6">
-    {% include "partials/rbac_table.html" %}
+    <div class="card p-6">
+      <div class="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h2 class="font-display text-2xl text-ink">权限列表</h2>
+          <p class="text-sm text-muted">当前角色：{{ role_map.get(current_role, "-") }}</p>
+        </div>
+        <div class="flex flex-wrap gap-2">
+          <button
+            class="btn-primary"
+            hx-get="/admin/rbac/permissions/new?role={{ current_role }}"
+            hx-target="#modal-body"
+            hx-swap="innerHTML"
+            x-on:click="modalOpen = true"
+          >
+            新建权限
+          </button>
+          <button
+            class="btn-ghost"
+            hx-get="/admin/rbac/permissions/table?role={{ current_role }}"
+            hx-target="#permission-table"
+            hx-swap="outerHTML"
+            hx-indicator="#global-indicator"
+          >
+            刷新
+          </button>
+        </div>
+      </div>
+      <div class="mt-4">
+        {% include "partials/rbac_table.html" %}
+      </div>
+    </div>
   </section>
 </div>
 {% endblock %}

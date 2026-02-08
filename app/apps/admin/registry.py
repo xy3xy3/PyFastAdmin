@@ -11,16 +11,10 @@ ADMIN_TREE = [
         "children": [
             {
                 "key": "rbac",
-                "name": "RBAC 权限",
+                "name": "角色与权限",
                 "url": "/admin/rbac",
                 "actions": ["create", "read", "update", "delete"],
-            },
-            {
-                "key": "rbac_permissions",
-                "name": "权限树配置",
-                "url": "/admin/rbac/permissions",
-                "actions": ["read", "update"],
-            },
+            }
         ],
     },
     {

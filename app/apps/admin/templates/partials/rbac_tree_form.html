@@ -1,0 +1,81 @@
+{% macro render_node(node, checked_map, action_labels) %}
+  {% if node.children %}
+    <div class="rounded-2xl border border-black/10 bg-white/80 p-4">
+      <div class="flex items-center gap-3">
+        <div class="h-2 w-2 rounded-full bg-ink"></div>
+        <p class="text-sm font-semibold text-ink">{{ node.name }}</p>
+      </div>
+      <div class="mt-4 space-y-4 border-l border-black/10 pl-6">
+        {% for child in node.children %}
+          {{ render_node(child, checked_map, action_labels) }}
+        {% endfor %}
+      </div>
+    </div>
+  {% else %}
+    <div class="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+      <div>
+        <p class="text-sm font-semibold text-ink">{{ node.name }}</p>
+        <p class="text-xs text-muted">{{ node.url }}</p>
+      </div>
+      <div class="flex flex-wrap gap-2">
+        {% for action in node.actions %}
+          <label class="flex items-center gap-2 rounded-full border border-black/10 px-3 py-1 text-xs font-medium text-ink">
+            <input
+              type="checkbox"
+              name="perm_{{ node.key }}"
+              value="{{ action }}"
+              {% if action in checked_map.get(node.key, []) %}checked{% endif %}
+            />
+            {{ action_labels[action] }}
+          </label>
+        {% endfor %}
+      </div>
+    </div>
+  {% endif %}
+{% endmacro %}
+
+<div class="space-y-4">
+  <div class="flex items-start justify-between gap-4">
+    <div>
+      <h2 class="font-display text-2xl text-ink">配置权限树</h2>
+      <p class="text-sm text-muted">为当前角色快速勾选“增删改查”权限。</p>
+    </div>
+    <button class="btn-ghost px-3" x-on:click="modalOpen = false">关闭</button>
+  </div>
+
+  {% if error %}
+    <div class="rounded-2xl border border-black/10 bg-white/70 p-3 text-sm text-red-600">
+      {{ error }}
+    </div>
+  {% endif %}
+
+  {% if saved %}
+    <div class="rounded-2xl border border-black/10 bg-white/70 p-3 text-sm text-[rgb(var(--accent-cool))]">
+      权限树已保存。
+    </div>
+  {% endif %}
+
+  <form
+    class="grid gap-4"
+    hx-post="/admin/rbac/permissions/tree"
+    hx-target="#modal-body"
+    hx-swap="innerHTML"
+    hx-indicator="#modal-indicator"
+  >
+    <input type="hidden" name="role_slug" value="{{ role_slug }}" />
+    <div class="rounded-2xl border border-black/10 bg-white/70 p-3 text-sm text-muted">
+      当前角色：<span class="font-semibold text-ink">{{ role_slug }}</span>
+    </div>
+
+    <div class="space-y-5">
+      {% for group in tree %}
+        {{ render_node(group, checked_map, action_labels) }}
+      {% endfor %}
+    </div>
+
+    <div class="flex flex-wrap items-center justify-end gap-3 pt-2">
+      <button type="button" class="btn-ghost" x-on:click="modalOpen = false">取消</button>
+      <button type="submit" class="btn-primary">保存权限</button>
+    </div>
+  </form>
+</div>

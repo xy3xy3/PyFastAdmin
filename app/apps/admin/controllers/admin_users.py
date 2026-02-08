@@ -11,7 +11,7 @@ from fastapi import APIRouter, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
 
-from app.services import admin_user_service, auth_service
+from app.services import admin_user_service, auth_service, role_service
 
 BASE_DIR = Path(__file__).resolve().parents[1]
 TEMPLATES_DIR = BASE_DIR / "templates"
@@ -35,13 +35,6 @@ STATUS_META: dict[str, dict[str, str]] = {
     "disabled": {"label": "禁用", "color": "#b7791f"},
 }
 
-ROLE_META = {
-    "super": "超级管理员",
-    "admin": "管理员",
-    "viewer": "只读",
-}
-
-
 def base_context(request: Request) -> dict[str, Any]:
     return {
         "request": request,
@@ -54,13 +47,13 @@ def build_form_data(values: dict[str, Any]) -> dict[str, Any]:
         "username": values.get("username", ""),
         "display_name": values.get("display_name", ""),
         "email": values.get("email", ""),
-        "role": values.get("role", "admin"),
+        "role_slug": values.get("role_slug", "admin"),
         "status": values.get("status", "enabled"),
         "password": values.get("password", ""),
     }
 
 
-def form_errors(values: dict[str, Any], is_create: bool) -> list[str]:
+def form_errors(values: dict[str, Any], is_create: bool, role_slugs: set[str]) -> list[str]:
     errors: list[str] = []
     if len(values.get("username", "")) < 3:
         errors.append("账号至少 3 个字符")
@@ -68,7 +61,7 @@ def form_errors(values: dict[str, Any], is_create: bool) -> list[str]:
         errors.append("显示名称至少 2 个字符")
     if values.get("status") not in STATUS_META:
         errors.append("状态不合法")
-    if values.get("role") not in ROLE_META:
+    if role_slugs and values.get("role_slug") not in role_slugs:
         errors.append("角色不合法")
     if is_create and len(values.get("password", "")) < 6:
         errors.append("初始密码至少 6 位")
@@ -78,6 +71,8 @@ def form_errors(values: dict[str, Any], is_create: bool) -> list[str]:
 @router.get("/users", response_class=HTMLResponse)
 async def admin_users_page(request: Request) -> HTMLResponse:
     items = await admin_user_service.list_admins()
+    roles = await role_service.list_roles()
+    role_map = {item.slug: item.name for item in roles}
     stats = {
         "total": len(items),
         "enabled": sum(1 for item in items if item.status == "enabled"),
@@ -89,7 +84,7 @@ async def admin_users_page(request: Request) -> HTMLResponse:
         "items": items,
         "stats": stats,
         "status_meta": STATUS_META,
-        "role_meta": ROLE_META,
+        "role_map": role_map,
     }
     return templates.TemplateResponse("pages/admin_users.html", context)
 
@@ -97,18 +92,22 @@ async def admin_users_page(request: Request) -> HTMLResponse:
 @router.get("/users/table", response_class=HTMLResponse)
 async def admin_users_table(request: Request, q: str | None = None) -> HTMLResponse:
     items = await admin_user_service.list_admins(q)
+    roles = await role_service.list_roles()
+    role_map = {item.slug: item.name for item in roles}
     context = {
         **base_context(request),
         "items": items,
         "status_meta": STATUS_META,
-        "role_meta": ROLE_META,
+        "role_map": role_map,
     }
     return templates.TemplateResponse("partials/admin_users_table.html", context)
 
 
 @router.get("/users/new", response_class=HTMLResponse)
 async def admin_users_new(request: Request) -> HTMLResponse:
-    form = build_form_data({})
+    roles = await role_service.list_roles()
+    default_slug = roles[0].slug if roles else "admin"
+    form = build_form_data({"role_slug": default_slug})
     context = {
         **base_context(request),
         "mode": "create",
@@ -116,7 +115,7 @@ async def admin_users_new(request: Request) -> HTMLResponse:
         "form": form,
         "errors": [],
         "status_meta": STATUS_META,
-        "role_meta": ROLE_META,
+        "roles": roles,
     }
     return templates.TemplateResponse("partials/admin_users_form.html", context)
 
@@ -127,12 +126,13 @@ async def admin_users_edit(request: Request, item_id: PydanticObjectId) -> HTMLR
     if not item:
         raise HTTPException(status_code=404, detail="账号不存在")
 
+    roles = await role_service.list_roles()
     form = build_form_data(
         {
             "username": item.username,
             "display_name": item.display_name,
             "email": item.email,
-            "role": item.role,
+            "role_slug": item.role_slug,
             "status": item.status,
             "password": "",
         }
@@ -144,7 +144,7 @@ async def admin_users_edit(request: Request, item_id: PydanticObjectId) -> HTMLR
         "form": form,
         "errors": [],
         "status_meta": STATUS_META,
-        "role_meta": ROLE_META,
+        "roles": roles,
     }
     return templates.TemplateResponse("partials/admin_users_form.html", context)
 
@@ -155,22 +155,24 @@ async def admin_users_create(
     username: str = Form(""),
     display_name: str = Form(""),
     email: str = Form(""),
-    role: str = Form("admin"),
+    role_slug: str = Form("admin"),
     status: str = Form("enabled"),
     password: str = Form(""),
 ) -> HTMLResponse:
+    roles = await role_service.list_roles()
+    role_slugs = {item.slug for item in roles}
     form = build_form_data(
         {
             "username": username.strip(),
             "display_name": display_name.strip(),
             "email": email.strip(),
-            "role": role,
+            "role_slug": role_slug,
             "status": status,
             "password": password,
         }
     )
 
-    errors = form_errors(form, is_create=True)
+    errors = form_errors(form, is_create=True, role_slugs=role_slugs)
     if await admin_user_service.get_admin_by_username(form["username"]):
         errors.append("账号已存在")
 
@@ -182,7 +184,7 @@ async def admin_users_create(
             "form": form,
             "errors": errors,
             "status_meta": STATUS_META,
-            "role_meta": ROLE_META,
+            "roles": roles,
         }
         return templates.TemplateResponse(
             "partials/admin_users_form.html", context, status_code=422
@@ -192,18 +194,19 @@ async def admin_users_create(
         "username": form["username"],
         "display_name": form["display_name"],
         "email": form["email"],
-        "role": form["role"],
+        "role_slug": form["role_slug"],
         "status": form["status"],
         "password_hash": auth_service.hash_password(form["password"]),
     }
     await admin_user_service.create_admin(payload)
 
     items = await admin_user_service.list_admins()
+    role_map = {item.slug: item.name for item in roles}
     context = {
         **base_context(request),
         "items": items,
         "status_meta": STATUS_META,
-        "role_meta": ROLE_META,
+        "role_map": role_map,
     }
     response = templates.TemplateResponse("partials/admin_users_table.html", context)
     response.headers["HX-Trigger"] = (
@@ -218,7 +221,7 @@ async def admin_users_update(
     item_id: PydanticObjectId,
     display_name: str = Form(""),
     email: str = Form(""),
-    role: str = Form("admin"),
+    role_slug: str = Form("admin"),
     status: str = Form("enabled"),
     password: str = Form(""),
 ) -> HTMLResponse:
@@ -226,18 +229,20 @@ async def admin_users_update(
     if not item:
         raise HTTPException(status_code=404, detail="账号不存在")
 
+    roles = await role_service.list_roles()
+    role_slugs = {item.slug for item in roles}
     form = build_form_data(
         {
             "username": item.username,
             "display_name": display_name.strip(),
             "email": email.strip(),
-            "role": role,
+            "role_slug": role_slug,
             "status": status,
             "password": password,
         }
     )
 
-    errors = form_errors(form, is_create=False)
+    errors = form_errors(form, is_create=False, role_slugs=role_slugs)
     if errors:
         context = {
             **base_context(request),
@@ -246,7 +251,7 @@ async def admin_users_update(
             "form": form,
             "errors": errors,
             "status_meta": STATUS_META,
-            "role_meta": ROLE_META,
+            "roles": roles,
         }
         return templates.TemplateResponse(
             "partials/admin_users_form.html", context, status_code=422
@@ -255,7 +260,7 @@ async def admin_users_update(
     payload = {
         "display_name": form["display_name"],
         "email": form["email"],
-        "role": form["role"],
+        "role_slug": form["role_slug"],
         "status": form["status"],
         "password_hash": auth_service.hash_password(form["password"]) if form["password"] else "",
     }
@@ -264,11 +269,12 @@ async def admin_users_update(
         request.session["admin_name"] = item.display_name
 
     items = await admin_user_service.list_admins()
+    role_map = {item.slug: item.name for item in roles}
     context = {
         **base_context(request),
         "items": items,
         "status_meta": STATUS_META,
-        "role_meta": ROLE_META,
+        "role_map": role_map,
     }
     response = templates.TemplateResponse("partials/admin_users_table.html", context)
     response.headers["HX-Trigger"] = (
@@ -288,11 +294,13 @@ async def admin_users_delete(request: Request, item_id: PydanticObjectId) -> HTM
 
     await admin_user_service.delete_admin(item)
     items = await admin_user_service.list_admins()
+    roles = await role_service.list_roles()
+    role_map = {item.slug: item.name for item in roles}
     context = {
         **base_context(request),
         "items": items,
         "status_meta": STATUS_META,
-        "role_meta": ROLE_META,
+        "role_map": role_map,
     }
     response = templates.TemplateResponse("partials/admin_users_table.html", context)
     response.headers["HX-Trigger"] = (

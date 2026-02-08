@@ -23,19 +23,15 @@
   <form
     class="grid gap-4"
     hx-post="{{ action }}"
-    hx-target="#rbac-table"
+    hx-target="#permission-table"
     hx-swap="outerHTML"
     hx-indicator="#modal-indicator"
   >
+    <input type="hidden" name="role_slug" value="{{ role_slug }}" />
+    <div class="rounded-2xl border border-black/10 bg-white/70 p-3 text-sm text-muted">
+      当前角色：<span class="font-semibold text-ink">{{ role_slug }}</span>
+    </div>
     <div class="grid gap-4 md:grid-cols-2">
-      <div>
-        <label class="label">角色标识</label>
-        <input name="role_key" class="input" required value="{{ form.role_key }}" />
-      </div>
-      <div>
-        <label class="label">角色名称</label>
-        <input name="role_name" class="input" required value="{{ form.role_name }}" />
-      </div>
       <div>
         <label class="label">资源</label>
         <input name="resource" class="input" required value="{{ form.resource }}" />
@@ -69,7 +65,7 @@
       </div>
       <div>
         <label class="label">负责人</label>
-        <input name="owner" class="input" required value="{{ form.owner }}" />
+        <input name="owner" class="input" value="{{ form.owner }}" />
       </div>
     </div>
 

@@ -36,7 +36,7 @@ async def create_admin(payload: dict[str, Any]) -> AdminUser:
         username=payload["username"],
         display_name=payload["display_name"],
         email=payload.get("email", ""),
-        role=payload.get("role", "super"),
+        role_slug=payload.get("role_slug", "super"),
         status=payload.get("status", "enabled"),
         password_hash=payload["password_hash"],
         created_at=utc_now(),
@@ -49,7 +49,7 @@ async def create_admin(payload: dict[str, Any]) -> AdminUser:
 async def update_admin(admin: AdminUser, payload: dict[str, Any]) -> AdminUser:
     admin.display_name = payload["display_name"]
     admin.email = payload.get("email", "")
-    admin.role = payload.get("role", admin.role)
+    admin.role_slug = payload.get("role_slug", admin.role_slug)
     admin.status = payload.get("status", admin.status)
     if payload.get("password_hash"):
         admin.password_hash = payload["password_hash"]

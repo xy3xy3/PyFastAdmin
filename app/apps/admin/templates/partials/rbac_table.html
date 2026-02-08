@@ -1,14 +1,16 @@
-<div id="rbac-table" class="space-y-4">
+<div id="permission-table" class="space-y-4">
   {% if items %}
     <div class="hidden overflow-hidden rounded-2xl border border-black/10 bg-white/80 md:block">
       <table class="w-full text-left text-sm">
         <thead class="bg-black/5 text-xs uppercase tracking-widest text-muted">
           <tr>
-            <th class="px-4 py-3">角色</th>
             <th class="px-4 py-3">资源</th>
+            <th class="px-4 py-3">动作</th>
             <th class="px-4 py-3">负责人</th>
             <th class="px-4 py-3">优先级</th>
             <th class="px-4 py-3">状态</th>
+            <th class="px-4 py-3">标签</th>
+            <th class="px-4 py-3">描述</th>
             <th class="px-4 py-3">更新时间</th>
             <th class="px-4 py-3 text-right">操作</th>
           </tr>
@@ -17,18 +19,9 @@
           {% for item in items %}
             {% set meta = status_meta[item.status] %}
             <tr class="border-t border-black/5">
-              <td class="px-4 py-3 font-semibold text-ink">
-                <div>{{ item.role_name }}</div>
-                <div class="text-xs text-muted">{{ item.role_key }}</div>
-              </td>
-              <td class="px-4 py-3">
-                <div class="font-semibold text-ink">{{ item.resource }}</div>
-                <div class="text-xs text-muted">{{ item.action }}</div>
-                {% if item.description %}
-                  <div class="text-xs text-muted">{{ item.description }}</div>
-                {% endif %}
-              </td>
-              <td class="px-4 py-3 text-muted">{{ item.owner }}</td>
+              <td class="px-4 py-3 font-semibold text-ink">{{ item.resource }}</td>
+              <td class="px-4 py-3 text-muted">{{ item.action }}</td>
+              <td class="px-4 py-3 text-muted">{{ item.owner or "-" }}</td>
               <td class="px-4 py-3">
                 <span class="tag">{{ priority_meta[item.priority] }}</span>
               </td>
@@ -37,12 +30,24 @@
                   {{ meta.label }}
                 </span>
               </td>
+              <td class="px-4 py-3">
+                <div class="flex flex-wrap gap-1">
+                  {% if item.tags %}
+                    {% for tag in item.tags %}
+                      <span class="tag">{{ tag }}</span>
+                    {% endfor %}
+                  {% else %}
+                    <span class="text-xs text-muted">-</span>
+                  {% endif %}
+                </div>
+              </td>
+              <td class="px-4 py-3 text-muted">{{ item.description or "-" }}</td>
               <td class="px-4 py-3 text-muted">{{ item.updated_at | fmt_dt }}</td>
               <td class="px-4 py-3 text-right">
                 <div class="flex justify-end gap-2">
                   <button
                     class="btn-ghost px-3"
-                    hx-get="/admin/rbac/{{ item.id }}/edit"
+                    hx-get="/admin/rbac/permissions/{{ item.id }}/edit"
                     hx-target="#modal-body"
                     hx-swap="innerHTML"
                     x-on:click="modalOpen = true"
@@ -51,8 +56,8 @@
                   </button>
                   <button
                     class="btn-ghost px-3"
-                    hx-delete="/admin/rbac/{{ item.id }}"
-                    hx-target="#rbac-table"
+                    hx-delete="/admin/rbac/permissions/{{ item.id }}"
+                    hx-target="#permission-table"
                     hx-swap="outerHTML"
                     hx-confirm="确认删除该条记录吗？"
                     hx-indicator="#global-indicator"
@@ -73,27 +78,31 @@
         <div class="card p-4">
           <div class="flex items-center justify-between">
             <div>
-              <p class="text-sm text-muted">{{ item.role_key }}</p>
-              <p class="text-lg font-semibold text-ink">{{ item.role_name }}</p>
+              <p class="text-sm text-muted">{{ item.resource }}</p>
+              <p class="text-lg font-semibold text-ink">{{ item.action }}</p>
             </div>
             <span class="tag" style="border-color: {{ meta.color }}; color: {{ meta.color }};">
               {{ meta.label }}
             </span>
           </div>
           <div class="mt-3 text-sm text-muted">
-            <p>负责人：{{ item.owner }}</p>
-            <p>资源：{{ item.resource }} · 动作：{{ item.action }}</p>
+            <p>负责人：{{ item.owner or "-" }}</p>
+            <p>优先级：{{ priority_meta[item.priority] }}</p>
+            <p>描述：{{ item.description or "-" }}</p>
           </div>
           <div class="mt-3 flex flex-wrap gap-2">
-            <span class="tag">{{ priority_meta[item.priority] }}</span>
-            {% for tag in item.tags %}
-              <span class="tag">{{ tag }}</span>
-            {% endfor %}
+            {% if item.tags %}
+              {% for tag in item.tags %}
+                <span class="tag">{{ tag }}</span>
+              {% endfor %}
+            {% else %}
+              <span class="text-xs text-muted">暂无标签</span>
+            {% endif %}
           </div>
           <div class="mt-4 flex gap-2">
             <button
               class="btn-ghost flex-1"
-              hx-get="/admin/rbac/{{ item.id }}/edit"
+              hx-get="/admin/rbac/permissions/{{ item.id }}/edit"
               hx-target="#modal-body"
               hx-swap="innerHTML"
               x-on:click="modalOpen = true"
@@ -102,8 +111,8 @@
             </button>
             <button
               class="btn-ghost flex-1"
-              hx-delete="/admin/rbac/{{ item.id }}"
-              hx-target="#rbac-table"
+              hx-delete="/admin/rbac/permissions/{{ item.id }}"
+              hx-target="#permission-table"
               hx-swap="outerHTML"
               hx-confirm="确认删除该条记录吗？"
               hx-indicator="#global-indicator"
@@ -116,11 +125,11 @@
     </div>
   {% else %}
     <div class="card p-10 text-center">
-      <p class="font-display text-2xl text-ink">暂无 RBAC 数据</p>
-      <p class="mt-2 text-sm text-muted">可以通过“新建 RBAC”快速添加一条记录。</p>
+      <p class="font-display text-2xl text-ink">暂无权限数据</p>
+      <p class="mt-2 text-sm text-muted">可以通过“新建权限”快速添加。</p>
       <button
         class="btn-primary mt-6"
-        hx-get="/admin/rbac/new"
+        hx-get="/admin/rbac/permissions/new?role={{ current_role }}"
         hx-target="#modal-body"
         hx-swap="innerHTML"
         hx-indicator="#global-indicator"

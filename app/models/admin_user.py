@@ -19,7 +19,7 @@ class AdminUser(Document):
     username: str = Field(..., min_length=3, max_length=32)
     display_name: str = Field(..., min_length=2, max_length=32)
     email: str = Field(default="", max_length=64)
-    role: str = Field(default="super", max_length=32)
+    role_slug: str = Field(default="super", max_length=32)
     status: Literal["enabled", "disabled"] = "enabled"
     password_hash: str = Field(..., min_length=10)
     last_login: datetime | None = None

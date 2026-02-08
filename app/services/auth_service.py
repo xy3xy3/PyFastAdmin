@@ -44,7 +44,7 @@ async def ensure_default_admin() -> AdminUser:
             "username": ADMIN_USER,
             "display_name": "超级管理员",
             "email": "",
-            "role": "super",
+            "role_slug": "super",
             "status": "enabled",
             "password_hash": hash_password(ADMIN_PASS),
         }

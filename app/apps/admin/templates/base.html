@@ -19,7 +19,8 @@
         "collapsedMenuOpen": "",
         "menuOpen": {
           "security": path.startswith("/admin/rbac") or path.startswith("/admin/users"),
-          "profile": path.startswith("/admin/profile") or path.startswith("/admin/password") or path.startswith("/admin/config") or path.startswith("/admin/logs"),
+          "system": path.startswith("/admin/config") or path.startswith("/admin/logs"),
+          "profile": path.startswith("/admin/profile") or path.startswith("/admin/password"),
         },
       }|tojson }}'
       x-init="desktopCollapsed = window.matchMedia('(min-width: 768px)').matches ? JSON.parse(localStorage.getItem('adminSidebarCollapsed') || 'false') : false; $watch('desktopCollapsed', value => localStorage.setItem('adminSidebarCollapsed', JSON.stringify(value)))"
@@ -46,10 +47,10 @@
           {% set crumb_parent = "个人设置" %}
           {% set crumb_title = "修改密码" %}
         {% elif path.startswith('/admin/config') %}
-          {% set crumb_parent = "系统设置" %}
+          {% set crumb_parent = "系统工具" %}
           {% set crumb_title = "系统配置" %}
         {% elif path.startswith('/admin/logs') %}
-          {% set crumb_parent = "系统设置" %}
+          {% set crumb_parent = "系统工具" %}
           {% set crumb_title = "操作日志" %}
         {% endif %}
 
@@ -107,6 +108,24 @@
                   </a>
                 </div>
 
+                <button type="button" class="sider-parent mt-4" x-on:click="menuOpen.system = !menuOpen.system">
+                  <span class="sider-parent-main">
+                    <i class="fa-solid fa-screwdriver-wrench sider-icon"></i>
+                    系统工具
+                  </span>
+                  <i class="fa-solid fa-angle-down sider-arrow" :style="{ transform: menuOpen.system ? 'rotate(180deg)' : 'rotate(0deg)' }"></i>
+                </button>
+                <div class="sider-tree" x-show="menuOpen.system" x-cloak>
+                  <a class="sider-link {% if path.startswith('/admin/config') %}sider-link-active{% endif %}" href="/admin/config" x-on:click="mobileSidebarOpen = false">
+                    <i class="fa-solid fa-gears sider-icon"></i>
+                    系统配置
+                  </a>
+                  <a class="sider-link {% if path.startswith('/admin/logs') %}sider-link-active{% endif %}" href="/admin/logs" x-on:click="mobileSidebarOpen = false">
+                    <i class="fa-solid fa-file-lines sider-icon"></i>
+                    操作日志
+                  </a>
+                </div>
+
                 <button type="button" class="sider-parent mt-4" x-on:click="menuOpen.profile = !menuOpen.profile">
                   <span class="sider-parent-main">
                     <i class="fa-regular fa-user sider-icon"></i>
@@ -122,14 +141,6 @@
                   <a class="sider-link {% if path.startswith('/admin/password') %}sider-link-active{% endif %}" href="/admin/password" x-on:click="mobileSidebarOpen = false">
                     <i class="fa-solid fa-key sider-icon"></i>
                     修改密码
-                  </a>
-                  <a class="sider-link {% if path.startswith('/admin/config') %}sider-link-active{% endif %}" href="/admin/config" x-on:click="mobileSidebarOpen = false">
-                    <i class="fa-solid fa-gears sider-icon"></i>
-                    系统配置
-                  </a>
-                  <a class="sider-link {% if path.startswith('/admin/logs') %}sider-link-active{% endif %}" href="/admin/logs" x-on:click="mobileSidebarOpen = false">
-                    <i class="fa-solid fa-file-lines sider-icon"></i>
-                    操作日志
                   </a>
                 </div>
               </div>
@@ -159,10 +170,30 @@
                   </div>
                 </div>
 
+                <div class="compact-item" x-on:mouseenter="collapsedMenuOpen = 'system'" x-on:click.outside="collapsedMenuOpen = ''">
+                  <button
+                    type="button"
+                    class="compact-trigger {% if path.startswith('/admin/config') or path.startswith('/admin/logs') %}compact-link-active{% endif %}"
+                    title="系统工具"
+                    x-on:click="if (collapsedMenuOpen === 'system') { collapsedMenuOpen = '' } else { collapsedMenuOpen = 'system' }"
+                  >
+                    <i class="fa-solid fa-screwdriver-wrench"></i>
+                  </button>
+
+                  <div class="compact-flyout" x-show="collapsedMenuOpen === 'system'" x-cloak>
+                    <a class="compact-flyout-link {% if path.startswith('/admin/config') %}compact-flyout-link-active{% endif %}" href="/admin/config" x-on:click="collapsedMenuOpen = ''">
+                      系统配置
+                    </a>
+                    <a class="compact-flyout-link {% if path.startswith('/admin/logs') %}compact-flyout-link-active{% endif %}" href="/admin/logs" x-on:click="collapsedMenuOpen = ''">
+                      操作日志
+                    </a>
+                  </div>
+                </div>
+
                 <div class="compact-item" x-on:mouseenter="collapsedMenuOpen = 'profile'" x-on:click.outside="collapsedMenuOpen = ''">
                   <button
                     type="button"
-                    class="compact-trigger {% if path.startswith('/admin/profile') or path.startswith('/admin/password') or path.startswith('/admin/config') or path.startswith('/admin/logs') %}compact-link-active{% endif %}"
+                    class="compact-trigger {% if path.startswith('/admin/profile') or path.startswith('/admin/password') %}compact-link-active{% endif %}"
                     title="个人设置"
                     x-on:click="if (collapsedMenuOpen === 'profile') { collapsedMenuOpen = '' } else { collapsedMenuOpen = 'profile' }"
                   >
@@ -175,12 +206,6 @@
                     </a>
                     <a class="compact-flyout-link {% if path.startswith('/admin/password') %}compact-flyout-link-active{% endif %}" href="/admin/password" x-on:click="collapsedMenuOpen = ''">
                       修改密码
-                    </a>
-                    <a class="compact-flyout-link {% if path.startswith('/admin/config') %}compact-flyout-link-active{% endif %}" href="/admin/config" x-on:click="collapsedMenuOpen = ''">
-                      系统配置
-                    </a>
-                    <a class="compact-flyout-link {% if path.startswith('/admin/logs') %}compact-flyout-link-active{% endif %}" href="/admin/logs" x-on:click="collapsedMenuOpen = ''">
-                      操作日志
                     </a>
                   </div>
                 </div>

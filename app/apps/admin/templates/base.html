@@ -4,18 +4,29 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>{{ title or "RBAC 管理台" }}</title>
+    <link rel="stylesheet" href="/static/vendor/fontawesome/css/all.min.css" />
     <link rel="stylesheet" href="/static/css/app.css" />
   </head>
   <body class="antialiased">
+    {% set path = request.url.path %}
     <div
       id="app"
-      x-data="{ modalOpen: false }"
+      x-data='{{ {
+        "modalOpen": False,
+        "mobileSidebarOpen": False,
+        "desktopCollapsed": False,
+        "userMenuOpen": False,
+        "menuOpen": {
+          "security": path.startswith("/admin/rbac") or path.startswith("/admin/users"),
+          "profile": path.startswith("/admin/profile") or path.startswith("/admin/password") or path.startswith("/admin/config"),
+        },
+      }|tojson }}'
+      x-init="desktopCollapsed = window.matchMedia('(min-width: 768px)').matches ? JSON.parse(localStorage.getItem('adminSidebarCollapsed') || 'false') : false; $watch('desktopCollapsed', value => localStorage.setItem('adminSidebarCollapsed', JSON.stringify(value)))"
       x-on:rbac-close.window="modalOpen = false"
-      x-on:keydown.escape.window="modalOpen = false"
+      x-on:keydown.escape.window="modalOpen = false; mobileSidebarOpen = false; userMenuOpen = false"
       class="relative"
     >
       {% if current_admin %}
-        {% set path = request.url.path %}
         {% set crumb_parent = "控制台" %}
         {% set crumb_title = "首页" %}
         {% if path.startswith('/admin/rbac') %}
@@ -35,52 +46,158 @@
           {% set crumb_title = "系统配置" %}
         {% endif %}
 
-        <div class="admin-shell">
-          <aside class="admin-sider">
+        <div class="admin-shell" :class="{ 'admin-shell-collapsed': desktopCollapsed }">
+          <div class="admin-mask mobile-only" x-show="mobileSidebarOpen" x-on:click="mobileSidebarOpen = false" x-cloak></div>
+
+          <aside class="admin-sider" :class="{ 'admin-sider-mobile-open': mobileSidebarOpen }">
+            <button
+              type="button"
+              class="admin-collapse-trigger desktop-only"
+              x-on:click="desktopCollapsed = !desktopCollapsed"
+              :aria-label="desktopCollapsed ? '展开侧边栏' : '折叠侧边栏'"
+            >
+              <i class="fa-solid" :class="desktopCollapsed ? 'fa-angle-right' : 'fa-angle-left'"></i>
+            </button>
+
             <div class="admin-brand">
-              <div class="brand-dot"></div>
-              <div>
+              <div class="brand-dot"><i class="fa-solid fa-layer-group text-white text-sm"></i></div>
+              <div class="brand-text" x-show="!desktopCollapsed || mobileSidebarOpen" x-cloak>
                 <p class="text-base font-semibold text-slate-900">PyFastAdmin</p>
                 <p class="text-xs text-slate-400">Ant Pro Style</p>
               </div>
+              <button
+                type="button"
+                class="btn-ghost mobile-only ml-auto h-8 w-8 px-0"
+                x-on:click="mobileSidebarOpen = false"
+                aria-label="关闭侧边栏"
+              >
+                <i class="fa-solid fa-xmark"></i>
+              </button>
             </div>
 
             <nav class="admin-nav">
-              <div class="sider-group">权限管理</div>
-              <div class="sider-tree">
-                <a class="sider-link {% if path.startswith('/admin/rbac') %}sider-link-active{% endif %}" href="/admin/rbac">RBAC 权限</a>
-                <a class="sider-link {% if path.startswith('/admin/users') %}sider-link-active{% endif %}" href="/admin/users">管理员管理</a>
+              <div x-show="!desktopCollapsed || mobileSidebarOpen" x-cloak>
+                <button type="button" class="sider-parent" x-on:click="menuOpen.security = !menuOpen.security">
+                  <span class="sider-parent-main">
+                    <i class="fa-solid fa-folder-tree sider-icon"></i>
+                    权限管理
+                  </span>
+                  <i class="fa-solid fa-angle-down sider-arrow" :style="{ transform: menuOpen.security ? 'rotate(180deg)' : 'rotate(0deg)' }"></i>
+                </button>
+                <div class="sider-tree" x-show="menuOpen.security" x-cloak>
+                  <a class="sider-link {% if path.startswith('/admin/rbac') %}sider-link-active{% endif %}" href="/admin/rbac" x-on:click="mobileSidebarOpen = false">
+                    <i class="fa-solid fa-user-shield sider-icon"></i>
+                    RBAC 权限
+                  </a>
+                  <a class="sider-link {% if path.startswith('/admin/users') %}sider-link-active{% endif %}" href="/admin/users" x-on:click="mobileSidebarOpen = false">
+                    <i class="fa-solid fa-users-gear sider-icon"></i>
+                    管理员管理
+                  </a>
+                </div>
+
+                <button type="button" class="sider-parent mt-4" x-on:click="menuOpen.profile = !menuOpen.profile">
+                  <span class="sider-parent-main">
+                    <i class="fa-regular fa-user sider-icon"></i>
+                    个人设置
+                  </span>
+                  <i class="fa-solid fa-angle-down sider-arrow" :style="{ transform: menuOpen.profile ? 'rotate(180deg)' : 'rotate(0deg)' }"></i>
+                </button>
+                <div class="sider-tree" x-show="menuOpen.profile" x-cloak>
+                  <a class="sider-link {% if path.startswith('/admin/profile') %}sider-link-active{% endif %}" href="/admin/profile" x-on:click="mobileSidebarOpen = false">
+                    <i class="fa-regular fa-id-card sider-icon"></i>
+                    个人资料
+                  </a>
+                  <a class="sider-link {% if path.startswith('/admin/password') %}sider-link-active{% endif %}" href="/admin/password" x-on:click="mobileSidebarOpen = false">
+                    <i class="fa-solid fa-key sider-icon"></i>
+                    修改密码
+                  </a>
+                  <a class="sider-link {% if path.startswith('/admin/config') %}sider-link-active{% endif %}" href="/admin/config" x-on:click="mobileSidebarOpen = false">
+                    <i class="fa-solid fa-gears sider-icon"></i>
+                    系统配置
+                  </a>
+                </div>
               </div>
 
-              <div class="sider-group mt-6">个人设置</div>
-              <div class="sider-tree">
-                <a class="sider-link {% if path.startswith('/admin/profile') %}sider-link-active{% endif %}" href="/admin/profile">个人资料</a>
-                <a class="sider-link {% if path.startswith('/admin/password') %}sider-link-active{% endif %}" href="/admin/password">修改密码</a>
-                <a class="sider-link {% if path.startswith('/admin/config') %}sider-link-active{% endif %}" href="/admin/config">系统配置</a>
+              <div class="compact-nav" x-show="desktopCollapsed && !mobileSidebarOpen" x-cloak>
+                <a class="compact-link {% if path.startswith('/admin/rbac') %}compact-link-active{% endif %}" href="/admin/rbac" title="RBAC 权限">
+                  <i class="fa-solid fa-user-shield"></i>
+                </a>
+                <a class="compact-link {% if path.startswith('/admin/users') %}compact-link-active{% endif %}" href="/admin/users" title="管理员管理">
+                  <i class="fa-solid fa-users-gear"></i>
+                </a>
+                <a class="compact-link {% if path.startswith('/admin/profile') %}compact-link-active{% endif %}" href="/admin/profile" title="个人资料">
+                  <i class="fa-regular fa-id-card"></i>
+                </a>
+                <a class="compact-link {% if path.startswith('/admin/password') %}compact-link-active{% endif %}" href="/admin/password" title="修改密码">
+                  <i class="fa-solid fa-key"></i>
+                </a>
+                <a class="compact-link {% if path.startswith('/admin/config') %}compact-link-active{% endif %}" href="/admin/config" title="系统配置">
+                  <i class="fa-solid fa-gears"></i>
+                </a>
               </div>
             </nav>
           </aside>
 
           <div class="admin-workspace">
             <header class="admin-topbar">
-              <div>
-                <p class="text-xs uppercase tracking-wider text-slate-400">ADMIN CONSOLE</p>
-                <div class="breadcrumb">
-                  <span class="breadcrumb-muted">首页</span>
-                  <span class="breadcrumb-sep">/</span>
-                  <span class="breadcrumb-muted">{{ crumb_parent }}</span>
-                  <span class="breadcrumb-sep">/</span>
-                  <span class="breadcrumb-current">{{ crumb_title }}</span>
+              <div class="flex items-start gap-3">
+                <button
+                  type="button"
+                  class="btn-ghost mobile-only h-9 w-9 px-0"
+                  x-on:click="mobileSidebarOpen = true"
+                  aria-label="打开侧边栏"
+                >
+                  <i class="fa-solid fa-bars"></i>
+                </button>
+
+                <div>
+                  <p class="text-xs uppercase tracking-wider text-slate-400">ADMIN CONSOLE</p>
+                  <div class="breadcrumb">
+                    <span class="breadcrumb-muted">首页</span>
+                    <span class="breadcrumb-sep">/</span>
+                    <span class="breadcrumb-muted">{{ crumb_parent }}</span>
+                    <span class="breadcrumb-sep">/</span>
+                    <span class="breadcrumb-current">{{ crumb_title }}</span>
+                  </div>
                 </div>
               </div>
 
               <div class="flex items-center gap-3">
-                <a class="top-link" href="/admin/users">用户管理</a>
-                <div class="user-pill">
-                  <span class="user-avatar">{{ current_admin[0] if current_admin else "A" }}</span>
-                  <span class="text-sm text-slate-600">{{ current_admin }}</span>
+                <div class="relative" x-on:click.outside="userMenuOpen = false">
+                  <button
+                    type="button"
+                    class="user-pill"
+                    x-on:click="userMenuOpen = !userMenuOpen"
+                    :aria-expanded="userMenuOpen"
+                  >
+                    <span class="user-avatar">{{ current_admin[0] if current_admin else "A" }}</span>
+                    <span class="hidden text-sm text-slate-600 md:inline">{{ current_admin }}</span>
+                    <i class="fa-solid fa-angle-down text-xs text-slate-400 transition-transform" :style="{ transform: userMenuOpen ? 'rotate(180deg)' : 'rotate(0deg)' }"></i>
+                  </button>
+
+                  <div
+                    class="absolute right-0 top-11 z-30 min-w-[160px] rounded-md border border-slate-200 bg-white p-1 shadow-ink"
+                    x-show="userMenuOpen"
+                    x-cloak
+                  >
+                    <a
+                      class="flex items-center gap-2 rounded-md px-3 py-2 text-sm text-slate-600 hover:bg-blue-50 hover:text-blue-600"
+                      href="/admin/profile"
+                      x-on:click="userMenuOpen = false"
+                    >
+                      <i class="fa-regular fa-id-card"></i>
+                      个人资料
+                    </a>
+                    <a
+                      class="flex items-center gap-2 rounded-md px-3 py-2 text-sm text-slate-600 hover:bg-blue-50 hover:text-blue-600"
+                      href="/admin/logout"
+                      x-on:click="userMenuOpen = false"
+                    >
+                      <i class="fa-solid fa-right-from-bracket"></i>
+                      退出登录
+                    </a>
+                  </div>
                 </div>
-                <a class="btn-ghost" href="/admin/logout">退出</a>
               </div>
             </header>
 

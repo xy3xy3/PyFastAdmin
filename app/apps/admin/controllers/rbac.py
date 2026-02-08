@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -222,8 +223,9 @@ async def role_create(
     roles = await role_service.list_roles()
     context = {**base_context(request), "roles": roles, "status_meta": STATUS_META}
     response = templates.TemplateResponse("partials/role_table.html", context)
-    response.headers["HX-Trigger"] = (
-        '{"rbac-toast": {"title": "已创建", "message": "角色已保存"}, "rbac-close": true}'
+    response.headers["HX-Trigger"] = json.dumps(
+        {"rbac-toast": {"title": "已创建", "message": "角色已保存"}, "rbac-close": True},
+        ensure_ascii=True,
     )
     return response
 
@@ -267,8 +269,9 @@ async def role_update(
     roles = await role_service.list_roles()
     context = {**base_context(request), "roles": roles, "status_meta": STATUS_META}
     response = templates.TemplateResponse("partials/role_table.html", context)
-    response.headers["HX-Trigger"] = (
-        '{"rbac-toast": {"title": "已更新", "message": "角色已修改"}, "rbac-close": true}'
+    response.headers["HX-Trigger"] = json.dumps(
+        {"rbac-toast": {"title": "已更新", "message": "角色已修改"}, "rbac-close": True},
+        ensure_ascii=True,
     )
     return response
 
@@ -283,7 +286,8 @@ async def role_delete(request: Request, slug: str) -> HTMLResponse:
     roles = await role_service.list_roles()
     context = {**base_context(request), "roles": roles, "status_meta": STATUS_META}
     response = templates.TemplateResponse("partials/role_table.html", context)
-    response.headers["HX-Trigger"] = (
-        '{"rbac-toast": {"title": "已删除", "message": "角色已移除"}}'
+    response.headers["HX-Trigger"] = json.dumps(
+        {"rbac-toast": {"title": "已删除", "message": "角色已移除"}},
+        ensure_ascii=True,
     )
     return response

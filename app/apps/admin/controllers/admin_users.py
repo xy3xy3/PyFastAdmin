@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -209,8 +210,9 @@ async def admin_users_create(
         "role_map": role_map,
     }
     response = templates.TemplateResponse("partials/admin_users_table.html", context)
-    response.headers["HX-Trigger"] = (
-        '{"admin-toast": {"title": "已创建", "message": "管理员账号已保存"}, "rbac-close": true}'
+    response.headers["HX-Trigger"] = json.dumps(
+        {"admin-toast": {"title": "已创建", "message": "管理员账号已保存"}, "rbac-close": True},
+        ensure_ascii=True,
     )
     return response
 
@@ -277,8 +279,9 @@ async def admin_users_update(
         "role_map": role_map,
     }
     response = templates.TemplateResponse("partials/admin_users_table.html", context)
-    response.headers["HX-Trigger"] = (
-        '{"admin-toast": {"title": "已更新", "message": "管理员账号已修改"}, "rbac-close": true}'
+    response.headers["HX-Trigger"] = json.dumps(
+        {"admin-toast": {"title": "已更新", "message": "管理员账号已修改"}, "rbac-close": True},
+        ensure_ascii=True,
     )
     return response
 
@@ -303,7 +306,8 @@ async def admin_users_delete(request: Request, item_id: PydanticObjectId) -> HTM
         "role_map": role_map,
     }
     response = templates.TemplateResponse("partials/admin_users_table.html", context)
-    response.headers["HX-Trigger"] = (
-        '{"admin-toast": {"title": "已删除", "message": "管理员账号已移除"}}'
+    response.headers["HX-Trigger"] = json.dumps(
+        {"admin-toast": {"title": "已删除", "message": "管理员账号已移除"}},
+        ensure_ascii=True,
     )
     return response

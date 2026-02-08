@@ -1,9 +1,12 @@
 {% macro render_node(node, checked_map, action_labels) %}
   {% if node.children %}
-    <div class="rounded-2xl border border-black/10 bg-white/80 p-4">
+    <div class="rounded-2xl border border-black/10 bg-white/80 p-4" data-perm-group>
       <div class="flex items-center gap-3">
-        <div class="h-2 w-2 rounded-full bg-ink"></div>
-        <p class="text-sm font-semibold text-ink">{{ node.name }}</p>
+        <label class="flex items-center gap-3 text-sm font-semibold text-ink">
+          <input type="checkbox" class="h-4 w-4" data-perm-group-toggle aria-label="选中本组" />
+          <span class="h-2 w-2 rounded-full bg-ink" aria-hidden="true"></span>
+          <span>{{ node.name }}</span>
+        </label>
       </div>
       <div class="mt-4 space-y-4 border-l border-black/10 pl-6">
         {% for child in node.children %}
@@ -12,11 +15,14 @@
       </div>
     </div>
   {% else %}
-    <div class="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-      <div>
-        <p class="text-sm font-semibold text-ink">{{ node.name }}</p>
-        <p class="text-xs text-muted">{{ node.url }}</p>
-      </div>
+    <div class="flex flex-col gap-3 md:flex-row md:items-center md:justify-between" data-perm-row>
+      <label class="flex cursor-pointer items-start gap-3 text-left">
+        <input type="checkbox" class="mt-1 h-4 w-4" data-perm-row-toggle aria-label="选中本行" />
+        <span>
+          <p class="text-sm font-semibold text-ink">{{ node.name }}</p>
+          <p class="text-xs text-muted">{{ node.url }}</p>
+        </span>
+      </label>
       <div class="flex flex-wrap gap-2">
         {% for action in node.actions %}
           <label class="flex items-center gap-2 rounded-full border border-black/10 px-3 py-1 text-xs font-medium text-ink">

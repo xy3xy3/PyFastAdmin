@@ -40,25 +40,112 @@
     });
   });
 
+  const actionSelector = 'input[type="checkbox"][name^="perm_"]';
+
+  const getActionCheckboxes = (scope) =>
+    Array.from(scope.querySelectorAll(actionSelector));
+
+  const resolveToggleState = (checkboxes) => {
+    if (!checkboxes.length) {
+      return { checked: false, indeterminate: false };
+    }
+    const checkedCount = checkboxes.filter((item) => item.checked).length;
+    if (checkedCount === 0) {
+      return { checked: false, indeterminate: false };
+    }
+    if (checkedCount === checkboxes.length) {
+      return { checked: true, indeterminate: false };
+    }
+    return { checked: false, indeterminate: true };
+  };
+
+  const syncRowToggle = (rowEl) => {
+    const toggle = rowEl.querySelector("[data-perm-row-toggle]");
+    if (!toggle) return;
+    const state = resolveToggleState(getActionCheckboxes(rowEl));
+    toggle.checked = state.checked;
+    toggle.indeterminate = state.indeterminate;
+  };
+
+  const syncGroupToggle = (groupEl) => {
+    const toggle = groupEl.querySelector("[data-perm-group-toggle]");
+    if (!toggle) return;
+    const state = resolveToggleState(getActionCheckboxes(groupEl));
+    toggle.checked = state.checked;
+    toggle.indeterminate = state.indeterminate;
+  };
+
+  const syncPermToggles = (scope) => {
+    const root = scope || document;
+    root.querySelectorAll("[data-perm-row]").forEach(syncRowToggle);
+    root.querySelectorAll("[data-perm-group]").forEach(syncGroupToggle);
+  };
+
+  const findScope = (node) =>
+    (node instanceof Element && node.closest("[data-perm-scope]")) || document;
+
   document.addEventListener("click", (event) => {
     const button = event.target.closest("[data-perm-action]");
     if (!button) return;
-    const scope = button.closest("[data-perm-scope]") || document;
-    const checkboxes = scope.querySelectorAll(
-      'input[type="checkbox"][name^="perm_"]'
-    );
+    const scope = findScope(button);
+    const checkboxes = getActionCheckboxes(scope);
     if (!checkboxes.length) return;
-    const action = button.dataset.permAction;
+    const action = button.getAttribute("data-perm-action");
     if (action === "all") {
       checkboxes.forEach((item) => (item.checked = true));
+      syncPermToggles(scope);
       return;
     }
     if (action === "none") {
       checkboxes.forEach((item) => (item.checked = false));
+      syncPermToggles(scope);
       return;
     }
     if (action === "invert") {
       checkboxes.forEach((item) => (item.checked = !item.checked));
+      syncPermToggles(scope);
     }
   });
+
+  document.addEventListener("change", (event) => {
+    const target = event.target;
+    if (!(target instanceof HTMLInputElement)) return;
+    if (target.matches("[data-perm-row-toggle]")) {
+      const row = target.closest("[data-perm-row]");
+      if (!row) return;
+      getActionCheckboxes(row).forEach((item) => {
+        item.checked = target.checked;
+      });
+      syncPermToggles(findScope(row));
+      return;
+    }
+    if (target.matches("[data-perm-group-toggle]")) {
+      const group = target.closest("[data-perm-group]");
+      if (!group) return;
+      getActionCheckboxes(group).forEach((item) => {
+        item.checked = target.checked;
+      });
+      syncPermToggles(findScope(group));
+      return;
+    }
+    if (target.matches(actionSelector)) {
+      syncPermToggles(findScope(target));
+    }
+  });
+
+  const syncAfterSwap = (event) => {
+    const target = event.target;
+    if (target instanceof Element) {
+      syncPermToggles(target);
+    }
+  };
+
+  document.body.addEventListener("htmx:afterSwap", syncAfterSwap);
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", () =>
+      syncPermToggles(document)
+    );
+  } else {
+    syncPermToggles(document);
+  }
 })();

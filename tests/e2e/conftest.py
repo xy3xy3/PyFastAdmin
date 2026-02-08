@@ -7,12 +7,15 @@ import socket
 import subprocess
 import sys
 import time
+from pathlib import Path
 from typing import Iterator
 
 import httpx
 import pytest
 from pymongo import MongoClient
 from pymongo.errors import OperationFailure, PyMongoError
+
+ROOT_DIR = Path(__file__).resolve().parents[2]
 
 
 def _find_free_port() -> int:
@@ -34,7 +37,25 @@ def _wait_server_ready(base_url: str, timeout: float = 30.0) -> None:
     raise RuntimeError(f"Server did not start in time: {base_url}")
 
 
-@pytest.fixture(scope="session")
+def _terminate_process(process: subprocess.Popen[str]) -> tuple[str, str]:
+    if process.poll() is None:
+        process.terminate()
+        try:
+            process.wait(timeout=10)
+        except subprocess.TimeoutExpired:
+            process.kill()
+            process.wait(timeout=5)
+
+    stdout = ""
+    stderr = ""
+    if process.stdout:
+        stdout = process.stdout.read().strip()
+    if process.stderr:
+        stderr = process.stderr.read().strip()
+    return stdout, stderr
+
+
+@pytest.fixture(scope="function")
 def e2e_base_url(test_mongo_url: str, e2e_mongo_db_name: str) -> Iterator[str]:
     client = MongoClient(test_mongo_url)
     try:
@@ -74,7 +95,7 @@ def e2e_base_url(test_mongo_url: str, e2e_mongo_db_name: str) -> Iterator[str]:
             "--port",
             str(port),
         ],
-        cwd=str(os.getcwd()),
+        cwd=str(ROOT_DIR),
         env=env,
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
@@ -82,16 +103,16 @@ def e2e_base_url(test_mongo_url: str, e2e_mongo_db_name: str) -> Iterator[str]:
     )
 
     try:
-        _wait_server_ready(base_url)
+        try:
+            _wait_server_ready(base_url)
+        except RuntimeError as exc:
+            stdout, stderr = _terminate_process(process)
+            debug = "\n".join(part for part in [stdout[-800:], stderr[-800:]] if part)
+            raise RuntimeError(f"{exc}\n{debug}") from exc
+
         yield base_url
     finally:
-        process.terminate()
-        try:
-            process.wait(timeout=10)
-        except subprocess.TimeoutExpired:
-            process.kill()
-            process.wait(timeout=5)
-
+        _terminate_process(process)
         try:
             client.drop_database(e2e_mongo_db_name)
         except PyMongoError:

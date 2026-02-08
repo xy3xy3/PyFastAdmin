@@ -36,12 +36,12 @@
           <form class="mt-6 grid gap-4" method="post" action="/admin/login">
             <input type="hidden" name="next" value="{{ next }}" />
             <div>
-              <label class="label">账号</label>
-              <input name="username" class="input" required />
+              <label class="label" for="login-username">账号</label>
+              <input id="login-username" name="username" class="input" required />
             </div>
             <div>
-              <label class="label">密码</label>
-              <input name="password" type="password" class="input" required />
+              <label class="label" for="login-password">密码</label>
+              <input id="login-password" name="password" type="password" class="input" required />
             </div>
             <button type="submit" class="btn-primary w-full">登录</button>
           </form>

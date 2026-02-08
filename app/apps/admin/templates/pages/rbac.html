@@ -1,76 +1,66 @@
 {% extends "base.html" %}
 
 {% block content %}
-<div class="mx-auto max-w-6xl px-4 pb-16 pt-10 md:px-8">
-  <header class="grid gap-8 md:grid-cols-[1.2fr_0.8fr]">
-    <div class="space-y-5">
-      <div class="chip">RBAC 控制台</div>
-      <h1 class="font-display text-4xl leading-tight md:text-5xl">
-        用更清晰的视角管理你的 <span class="text-[rgb(var(--accent))]">角色权限</span>
-      </h1>
-      <p class="text-base text-muted md:text-lg">
-        角色与权限分离管理，权限支持树形配置。
-      </p>
-      <div class="flex flex-wrap gap-3">
-        <button
-          class="btn-primary"
-          hx-get="/admin/rbac/roles/new"
-          hx-target="#modal-body"
-          hx-swap="innerHTML"
-          x-on:click="modalOpen = true"
-        >
-          新建角色
-        </button>
-      </div>
-      <div class="rounded-2xl border border-black/10 bg-white/70 p-4 text-sm text-muted">
-        <p class="font-semibold text-ink">提示</p>
-        <p>权限树已内置在角色表单中，可在新建/编辑角色时一并配置。</p>
-      </div>
-    </div>
-    <div class="card grid gap-4 p-6">
+<div class="mx-auto max-w-6xl space-y-6 px-4 pb-16 pt-10 md:px-8">
+  <section
+    class="card p-6"
+    x-data='{{ {"search_q": filters.search_q, "search_status": filters.search_status, "search_sort": filters.search_sort, "page": pagination.page}|tojson }}'
+  >
+    <div class="flex flex-wrap items-start justify-between gap-3">
       <div>
-        <p class="label">角色数量</p>
-        <p class="text-3xl font-semibold text-ink">{{ stats.total }}</p>
+        <h1 class="font-display text-2xl text-ink">角色搜索</h1>
+        <p class="mt-1 text-sm text-muted">支持关键词、状态和排序筛选，直接点搜索就是刷新列表。</p>
       </div>
-      <div class="grid grid-cols-2 gap-4">
-        <div>
-          <p class="label">启用</p>
-          <p class="text-xl font-semibold text-ink">{{ stats.enabled }}</p>
-        </div>
-        <div>
-          <p class="label">禁用</p>
-          <p class="text-xl font-semibold text-ink">{{ stats.disabled }}</p>
-        </div>
-        <div>
-          <p class="label">最后更新</p>
-          <p class="text-sm text-muted">{{ stats.latest or "暂无" }}</p>
-        </div>
-      </div>
-      <div class="rounded-2xl border border-black/10 bg-white/70 p-4 text-sm text-muted">
-        <p class="font-semibold text-ink">说明</p>
-        <p>资源与动作可通过树形快速授权。</p>
-      </div>
+      <div class="chip">RBAC</div>
     </div>
-  </header>
 
-  <section class="mt-10">
-    <div class="card p-6">
-      <div class="flex items-center justify-between">
-        <h2 class="font-display text-2xl text-ink">角色列表</h2>
-        <button
-          class="btn-ghost"
-          hx-get="/admin/rbac/roles/table"
-          hx-target="#role-table"
-          hx-swap="outerHTML"
-          hx-indicator="#global-indicator"
-        >
-          刷新
+    <form
+      id="role-search-form"
+      class="mt-4 grid gap-4 md:grid-cols-4"
+      hx-get="/admin/rbac/roles/table"
+      hx-target="#role-table"
+      hx-swap="outerHTML"
+      hx-indicator="#global-indicator"
+      x-on:submit="page = 1"
+    >
+      <input type="hidden" name="page" x-model="page" />
+      <div class="md:col-span-2">
+        <label class="label">关键词</label>
+        <input
+          name="search_q"
+          x-model="search_q"
+          class="input"
+          placeholder="输入角色标识/名称/描述"
+        />
+      </div>
+      <div>
+        <label class="label">状态</label>
+        <select name="search_status" x-model="search_status" class="input">
+          <option value="">全部</option>
+          {% for key, meta in status_meta.items() %}
+            <option value="{{ key }}">{{ meta.label }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div>
+        <label class="label">排序</label>
+        <select name="search_sort" x-model="search_sort" class="input">
+          {% for key, label in role_sort_options.items() %}
+            <option value="{{ key }}">{{ label }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="md:col-span-4 flex flex-wrap justify-end gap-3">
+        <button type="button" class="btn-ghost" x-on:click="search_q=''; search_status=''; search_sort='updated_desc'; page=1; $nextTick(() => $el.form.requestSubmit())">
+          重置
         </button>
+        <button type="submit" class="btn-primary">搜索</button>
       </div>
-      <div class="mt-4">
-        {% include "partials/role_table.html" %}
-      </div>
-    </div>
+    </form>
+  </section>
+
+  <section>
+    {% include "partials/role_table.html" %}
   </section>
 </div>
 {% endblock %}

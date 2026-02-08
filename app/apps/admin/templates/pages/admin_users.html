@@ -1,92 +1,78 @@
 {% extends "base.html" %}
 
 {% block content %}
-<div class="mx-auto max-w-6xl px-4 pb-16 pt-10 md:px-8">
-  <header class="grid gap-8 md:grid-cols-[1.2fr_0.8fr]">
-    <div class="space-y-5">
-      <div class="chip">管理员管理</div>
-      <h1 class="font-display text-4xl leading-tight md:text-5xl">
-        统一维护后台 <span class="text-[rgb(var(--accent))]">管理员</span> 账号
-      </h1>
-      <p class="text-base text-muted md:text-lg">
-        支持创建、编辑、禁用管理员账号，并快速检索。
-      </p>
-      <div class="flex flex-wrap gap-3">
-        <button
-          class="btn-primary"
-          hx-get="/admin/users/new"
-          hx-target="#modal-body"
-          hx-swap="innerHTML"
-          x-on:click="modalOpen = true"
-        >
-          新建管理员
-        </button>
-        <button
-          class="btn-ghost"
-          hx-get="/admin/users/table"
-          hx-target="#admin-table"
-          hx-swap="outerHTML"
-          hx-indicator="#global-indicator"
-        >
-          刷新列表
-        </button>
-      </div>
-      <div class="rounded-2xl border border-black/10 bg-white/70 p-4 text-sm text-muted">
-        <p class="font-semibold text-ink">提示</p>
-        <p>可以通过搜索快速定位账号。</p>
-      </div>
-    </div>
-    <div class="card grid gap-4 p-6">
+<div class="mx-auto max-w-6xl space-y-6 px-4 pb-16 pt-10 md:px-8">
+  <section
+    class="card p-6"
+    x-data='{{ {"search_q": filters.search_q, "search_role": filters.search_role, "search_status": filters.search_status, "search_sort": filters.search_sort, "page": pagination.page}|tojson }}'
+  >
+    <div class="flex flex-wrap items-start justify-between gap-3">
       <div>
-        <p class="label">总量</p>
-        <p class="text-3xl font-semibold text-ink">{{ stats.total }}</p>
+        <h1 class="font-display text-2xl text-ink">管理员搜索</h1>
+        <p class="mt-1 text-sm text-muted">支持角色、状态和关键词检索，直接点搜索就是刷新列表。</p>
       </div>
-      <div class="grid grid-cols-2 gap-4">
-        <div>
-          <p class="label">启用</p>
-          <p class="text-xl font-semibold text-ink">{{ stats.enabled }}</p>
-        </div>
-        <div>
-          <p class="label">禁用</p>
-          <p class="text-xl font-semibold text-ink">{{ stats.disabled }}</p>
-        </div>
-        <div>
-          <p class="label">最后更新</p>
-          <p class="text-sm text-muted">{{ stats.latest or "暂无" }}</p>
-        </div>
-      </div>
-      <div class="rounded-2xl border border-black/10 bg-white/70 p-4 text-sm text-muted">
-        <p class="font-semibold text-ink">说明</p>
-        <p>管理员账号和权限可独立维护。</p>
-      </div>
+      <div class="chip">Admin</div>
     </div>
-  </header>
 
-  <section class="mt-10 card p-6">
-    <div class="flex flex-wrap items-center justify-between gap-4">
-      <div class="flex-1 min-w-[220px]">
-        <label class="label" for="search">快速搜索</label>
+    <form
+      id="admin-search-form"
+      class="mt-4 grid gap-4 md:grid-cols-5"
+      hx-get="/admin/users/table"
+      hx-target="#admin-table"
+      hx-swap="outerHTML"
+      hx-indicator="#global-indicator"
+      x-on:submit="page = 1"
+    >
+      <input type="hidden" name="page" x-model="page" />
+      <div class="md:col-span-2">
+        <label class="label">关键词</label>
         <input
-          id="search"
-          name="q"
+          name="search_q"
+          x-model="search_q"
           class="input"
           placeholder="输入账号/姓名/邮箱"
-          hx-get="/admin/users/table"
-          hx-trigger="keyup changed delay:400ms, search"
-          hx-target="#admin-table"
-          hx-swap="outerHTML"
-          hx-indicator="#global-indicator"
         />
       </div>
-      <div class="flex flex-wrap gap-2">
-        <div class="chip">安全</div>
-        <div class="chip">协作</div>
-        <div class="chip">可追踪</div>
+      <div>
+        <label class="label">角色</label>
+        <select name="search_role" x-model="search_role" class="input">
+          <option value="">全部</option>
+          {% for role in roles %}
+            <option value="{{ role.slug }}">{{ role.name }}（{{ role.slug }}）</option>
+          {% endfor %}
+        </select>
       </div>
-    </div>
+      <div>
+        <label class="label">状态</label>
+        <select name="search_status" x-model="search_status" class="input">
+          <option value="">全部</option>
+          {% for key, meta in status_meta.items() %}
+            <option value="{{ key }}">{{ meta.label }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div>
+        <label class="label">排序</label>
+        <select name="search_sort" x-model="search_sort" class="input">
+          {% for key, label in admin_sort_options.items() %}
+            <option value="{{ key }}">{{ label }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="md:col-span-5 flex flex-wrap justify-end gap-3">
+        <button
+          type="button"
+          class="btn-ghost"
+          x-on:click="search_q=''; search_role=''; search_status=''; search_sort='updated_desc'; page=1; $nextTick(() => $el.form.requestSubmit())"
+        >
+          重置
+        </button>
+        <button type="submit" class="btn-primary">搜索</button>
+      </div>
+    </form>
   </section>
 
-  <section class="mt-6">
+  <section>
     {% include "partials/admin_users_table.html" %}
   </section>
 </div>

@@ -1,52 +1,125 @@
-<div id="role-table" class="space-y-3">
+<div id="role-table" class="card p-6">
+  <div class="flex flex-wrap items-center justify-between gap-3">
+    <div>
+      <h2 class="font-display text-2xl text-ink">角色列表</h2>
+      <p class="mt-1 text-sm text-muted">共 {{ pagination.total }} 条记录</p>
+    </div>
+    <button
+      class="btn-primary"
+      hx-get="/admin/rbac/roles/new"
+      hx-target="#modal-body"
+      hx-swap="innerHTML"
+      hx-indicator="#global-indicator"
+      hx-vals='{{ {"search_q": filters.search_q, "search_status": filters.search_status, "search_sort": filters.search_sort, "page": pagination.page}|tojson }}'
+      x-on:click="modalOpen = true"
+    >
+      新建角色
+    </button>
+  </div>
+
   {% if roles %}
-    {% for role in roles %}
-      {% set meta = status_meta[role.status] %}
-      <div class="flex flex-col gap-3 rounded-2xl border border-black/10 bg-white/80 p-4 md:flex-row md:items-center md:justify-between">
-        <div>
-          <p class="text-sm text-muted">{{ role.slug }}</p>
-          <p class="text-lg font-semibold text-ink">{{ role.name }}</p>
-          <p class="text-xs text-muted">{{ role.description or "暂无描述" }}</p>
-        </div>
-        <div class="flex flex-wrap items-center gap-2">
-          <span class="tag" style="border-color: {{ meta.color }}; color: {{ meta.color }};">
-            {{ meta.label }}
-          </span>
-          <button
-            class="btn-ghost px-3"
-            hx-get="/admin/rbac/roles/{{ role.slug }}/edit"
-            hx-target="#modal-body"
-            hx-swap="innerHTML"
-            x-on:click="modalOpen = true"
-          >
-            编辑
-          </button>
-          <button
-            class="btn-ghost px-3"
-            hx-delete="/admin/rbac/roles/{{ role.slug }}"
-            hx-target="#role-table"
-            hx-swap="outerHTML"
-            hx-confirm="确认删除该角色吗？"
-            hx-indicator="#global-indicator"
-          >
-            删除
-          </button>
-        </div>
-      </div>
-    {% endfor %}
+    <div class="mt-4 overflow-hidden rounded-2xl border border-black/10 bg-white/80">
+      <table class="w-full text-left text-sm">
+        <thead class="bg-black/5 text-xs uppercase tracking-widest text-muted">
+          <tr>
+            <th class="px-4 py-3">标识</th>
+            <th class="px-4 py-3">名称</th>
+            <th class="px-4 py-3">描述</th>
+            <th class="px-4 py-3">状态</th>
+            <th class="px-4 py-3">更新时间</th>
+            <th class="px-4 py-3 text-right">操作</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for role in roles %}
+            {% set meta = status_meta[role.status] %}
+            <tr class="border-t border-black/5">
+              <td class="px-4 py-3 font-semibold text-ink">{{ role.slug }}</td>
+              <td class="px-4 py-3">{{ role.name }}</td>
+              <td class="px-4 py-3 text-muted">{{ role.description or "-" }}</td>
+              <td class="px-4 py-3">
+                <span class="tag" style="border-color: {{ meta.color }}; color: {{ meta.color }};">
+                  {{ meta.label }}
+                </span>
+              </td>
+              <td class="px-4 py-3 text-muted">{{ role.updated_at | fmt_dt }}</td>
+              <td class="px-4 py-3 text-right">
+                <div class="flex justify-end gap-2">
+                  <button
+                    class="btn-ghost px-3"
+                    hx-get="/admin/rbac/roles/{{ role.slug }}/edit"
+                    hx-target="#modal-body"
+                    hx-swap="innerHTML"
+                    hx-indicator="#global-indicator"
+                    hx-vals='{{ {"search_q": filters.search_q, "search_status": filters.search_status, "search_sort": filters.search_sort, "page": pagination.page}|tojson }}'
+                    x-on:click="modalOpen = true"
+                  >
+                    编辑
+                  </button>
+                  <button
+                    class="btn-ghost px-3"
+                    hx-delete="/admin/rbac/roles/{{ role.slug }}"
+                    hx-target="#role-table"
+                    hx-swap="outerHTML"
+                    hx-confirm="确认删除该角色吗？"
+                    hx-indicator="#global-indicator"
+                    hx-vals='{{ {"search_q": filters.search_q, "search_status": filters.search_status, "search_sort": filters.search_sort, "page": pagination.page}|tojson }}'
+                  >
+                    删除
+                  </button>
+                </div>
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
   {% else %}
-    <div class="rounded-2xl border border-black/10 bg-white/70 p-6 text-center">
-      <p class="font-display text-xl text-ink">暂无角色</p>
-      <p class="mt-2 text-sm text-muted">请先创建角色。</p>
-      <button
-        class="btn-primary mt-4"
-        hx-get="/admin/rbac/roles/new"
-        hx-target="#modal-body"
-        hx-swap="innerHTML"
-        x-on:click="modalOpen = true"
-      >
-        立即新建
-      </button>
+    <div class="mt-4 rounded-2xl border border-black/10 bg-white/70 p-8 text-center">
+      <p class="font-display text-2xl text-ink">暂无角色数据</p>
+      <p class="mt-2 text-sm text-muted">点击“新建角色”开始配置权限。</p>
     </div>
   {% endif %}
+
+  <div class="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-black/10 pt-4">
+    <p class="text-xs text-muted">
+      显示 {{ pagination.start_item }} - {{ pagination.end_item }} / {{ pagination.total }}
+    </p>
+    <div class="flex flex-wrap items-center gap-2">
+      <button
+        class="btn-ghost px-3 {% if not pagination.has_prev %}opacity-50 pointer-events-none{% endif %}"
+        hx-get="/admin/rbac/roles/table"
+        hx-target="#role-table"
+        hx-swap="outerHTML"
+        hx-indicator="#global-indicator"
+        hx-vals='{{ {"search_q": filters.search_q, "search_status": filters.search_status, "search_sort": filters.search_sort, "page": pagination.prev_page}|tojson }}'
+        {% if not pagination.has_prev %}disabled{% endif %}
+      >
+        上一页
+      </button>
+      {% for p in pagination.pages %}
+        <button
+          class="{% if p == pagination.page %}btn-primary{% else %}btn-ghost{% endif %} px-3"
+          hx-get="/admin/rbac/roles/table"
+          hx-target="#role-table"
+          hx-swap="outerHTML"
+          hx-indicator="#global-indicator"
+          hx-vals='{{ {"search_q": filters.search_q, "search_status": filters.search_status, "search_sort": filters.search_sort, "page": p}|tojson }}'
+        >
+          {{ p }}
+        </button>
+      {% endfor %}
+      <button
+        class="btn-ghost px-3 {% if not pagination.has_next %}opacity-50 pointer-events-none{% endif %}"
+        hx-get="/admin/rbac/roles/table"
+        hx-target="#role-table"
+        hx-swap="outerHTML"
+        hx-indicator="#global-indicator"
+        hx-vals='{{ {"search_q": filters.search_q, "search_status": filters.search_status, "search_sort": filters.search_sort, "page": pagination.next_page}|tojson }}'
+        {% if not pagination.has_next %}disabled{% endif %}
+      >
+        下一页
+      </button>
+    </div>
+  </div>
 </div>

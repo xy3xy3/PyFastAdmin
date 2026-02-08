@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 from datetime import datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, Mapping
 
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
@@ -36,6 +36,14 @@ STATUS_META: dict[str, dict[str, str]] = {
     "disabled": {"label": "禁用", "color": "#b7791f"},
 }
 
+ROLE_SORT_OPTIONS: dict[str, str] = {
+    "updated_desc": "最近更新",
+    "updated_asc": "最早更新",
+    "slug_asc": "标识 A-Z",
+}
+
+ROLE_PAGE_SIZE = 10
+
 ACTION_LABELS = {
     "create": "新增",
     "read": "查看",
@@ -57,6 +65,124 @@ def build_role_form(values: dict[str, Any]) -> dict[str, Any]:
         "slug": values.get("slug", ""),
         "status": values.get("status", "enabled"),
         "description": values.get("description", ""),
+    }
+
+
+def parse_positive_int(value: Any, default: int = 1) -> int:
+    try:
+        parsed = int(str(value))
+    except (TypeError, ValueError):
+        return default
+    return parsed if parsed > 0 else default
+
+
+def parse_role_filters(values: Mapping[str, Any]) -> tuple[dict[str, str], int]:
+    search_q = str(values.get("search_q") or values.get("q") or "").strip()
+    search_status = str(values.get("search_status") or "").strip()
+    if search_status not in STATUS_META:
+        search_status = ""
+
+    search_sort = str(values.get("search_sort") or "updated_desc").strip()
+    if search_sort not in ROLE_SORT_OPTIONS:
+        search_sort = "updated_desc"
+
+    page = parse_positive_int(values.get("page"), default=1)
+    return (
+        {
+            "search_q": search_q,
+            "search_status": search_status,
+            "search_sort": search_sort,
+        },
+        page,
+    )
+
+
+def build_pagination(total: int, page: int, page_size: int) -> dict[str, Any]:
+    total_pages = max((total + page_size - 1) // page_size, 1)
+    current = min(max(page, 1), total_pages)
+    start_page = max(current - 2, 1)
+    end_page = min(start_page + 4, total_pages)
+    start_page = max(end_page - 4, 1)
+
+    if total == 0:
+        start_item = 0
+        end_item = 0
+    else:
+        start_item = (current - 1) * page_size + 1
+        end_item = min(current * page_size, total)
+
+    return {
+        "page": current,
+        "page_size": page_size,
+        "total": total,
+        "total_pages": total_pages,
+        "has_prev": current > 1,
+        "has_next": current < total_pages,
+        "prev_page": current - 1,
+        "next_page": current + 1,
+        "pages": list(range(start_page, end_page + 1)),
+        "start_item": start_item,
+        "end_item": end_item,
+    }
+
+
+def filter_roles(roles: list[Any], filters: dict[str, str]) -> list[Any]:
+    filtered = roles
+    if filters["search_q"]:
+        keyword = filters["search_q"].lower()
+        filtered = [
+            item
+            for item in filtered
+            if keyword in item.slug.lower()
+            or keyword in item.name.lower()
+            or keyword in (item.description or "").lower()
+        ]
+    if filters["search_status"]:
+        filtered = [item for item in filtered if item.status == filters["search_status"]]
+
+    sort_key = filters["search_sort"]
+    if sort_key == "updated_asc":
+        filtered = sorted(filtered, key=lambda item: item.updated_at)
+    elif sort_key == "slug_asc":
+        filtered = sorted(filtered, key=lambda item: item.slug.lower())
+    else:
+        filtered = sorted(filtered, key=lambda item: item.updated_at, reverse=True)
+    return filtered
+
+
+async def read_request_values(request: Request) -> dict[str, str]:
+    values: dict[str, str] = {key: value for key, value in request.query_params.items()}
+    if request.method == "GET":
+        return values
+
+    content_type = request.headers.get("content-type", "")
+    if "application/x-www-form-urlencoded" not in content_type and "multipart/form-data" not in content_type:
+        return values
+
+    form_data = await request.form()
+    for key, value in form_data.items():
+        if isinstance(value, str):
+            values[key] = value
+    return values
+
+
+async def build_role_table_context(
+    request: Request,
+    filters: dict[str, str],
+    page: int,
+) -> dict[str, Any]:
+    roles = await role_service.list_roles()
+    filtered_roles = filter_roles(roles, filters)
+    pagination = build_pagination(len(filtered_roles), page, ROLE_PAGE_SIZE)
+    start = (pagination["page"] - 1) * ROLE_PAGE_SIZE
+    paged_roles = filtered_roles[start : start + ROLE_PAGE_SIZE]
+
+    return {
+        **base_context(request),
+        "roles": paged_roles,
+        "status_meta": STATUS_META,
+        "filters": filters,
+        "pagination": pagination,
     }
 
 def build_checked_map(form_data) -> dict[str, set[str]]:
@@ -117,33 +243,24 @@ async def admin_root() -> RedirectResponse:
 
 @router.get("/rbac", response_class=HTMLResponse)
 async def rbac_page(request: Request) -> HTMLResponse:
-    roles = await role_service.list_roles()
-    stats = {
-        "total": len(roles),
-        "enabled": sum(1 for item in roles if item.status == "enabled"),
-        "disabled": sum(1 for item in roles if item.status == "disabled"),
-        "latest": fmt_dt(roles[0].updated_at) if roles else None,
-    }
-    context = {
-        **base_context(request),
-        "roles": roles,
-        "stats": stats,
-        "status_meta": STATUS_META,
-        "action_labels": ACTION_LABELS,
-    }
+    filters, page = parse_role_filters(request.query_params)
+    context = await build_role_table_context(request, filters, page)
+    context["action_labels"] = ACTION_LABELS
+    context["role_sort_options"] = ROLE_SORT_OPTIONS
     return templates.TemplateResponse("pages/rbac.html", context)
 
 
 @router.get("/rbac/roles/table", response_class=HTMLResponse)
 async def role_table(request: Request) -> HTMLResponse:
-    roles = await role_service.list_roles()
-    context = {**base_context(request), "roles": roles, "status_meta": STATUS_META}
+    filters, page = parse_role_filters(request.query_params)
+    context = await build_role_table_context(request, filters, page)
     return templates.TemplateResponse("partials/role_table.html", context)
 
 
 @router.get("/rbac/roles/new", response_class=HTMLResponse)
 async def role_new(request: Request) -> HTMLResponse:
     form = build_role_form({})
+    filters, page = parse_role_filters(request.query_params)
     context = {
         **base_context(request),
         "mode": "create",
@@ -154,6 +271,8 @@ async def role_new(request: Request) -> HTMLResponse:
         "tree": ADMIN_TREE,
         "checked_map": {},
         "action_labels": ACTION_LABELS,
+        "filters": filters,
+        "page": page,
     }
     return templates.TemplateResponse("partials/role_form.html", context)
 
@@ -173,6 +292,7 @@ async def role_edit(request: Request, slug: str) -> HTMLResponse:
             "description": role.description,
         }
     )
+    filters, page = parse_role_filters(request.query_params)
     context = {
         **base_context(request),
         "mode": "edit",
@@ -183,6 +303,8 @@ async def role_edit(request: Request, slug: str) -> HTMLResponse:
         "tree": ADMIN_TREE,
         "checked_map": checked_map,
         "action_labels": ACTION_LABELS,
+        "filters": filters,
+        "page": page,
     }
     return templates.TemplateResponse("partials/role_form.html", context)
 
@@ -191,6 +313,8 @@ async def role_edit(request: Request, slug: str) -> HTMLResponse:
 async def role_create(
     request: Request,
 ) -> HTMLResponse:
+    request_values = await read_request_values(request)
+    filters, page = parse_role_filters(request_values)
     form_data = await request.form()
     form = build_role_form(
         {
@@ -214,14 +338,15 @@ async def role_create(
             "tree": ADMIN_TREE,
             "checked_map": build_checked_map(form_data),
             "action_labels": ACTION_LABELS,
+            "filters": filters,
+            "page": page,
         }
         return templates.TemplateResponse("partials/role_form.html", context, status_code=422)
 
     owner = request.session.get("admin_name") or "system"
     form["permissions"] = build_permissions(form_data, owner)
     await role_service.create_role(form)
-    roles = await role_service.list_roles()
-    context = {**base_context(request), "roles": roles, "status_meta": STATUS_META}
+    context = await build_role_table_context(request, filters, page)
     response = templates.TemplateResponse("partials/role_table.html", context)
     response.headers["HX-Trigger"] = json.dumps(
         {
@@ -238,6 +363,8 @@ async def role_update(
     request: Request,
     slug: str,
 ) -> HTMLResponse:
+    request_values = await read_request_values(request)
+    filters, page = parse_role_filters(request_values)
     role = await role_service.get_role_by_slug(slug)
     if not role:
         raise HTTPException(status_code=404, detail="角色不存在")
@@ -263,14 +390,15 @@ async def role_update(
             "tree": ADMIN_TREE,
             "checked_map": build_checked_map(form_data),
             "action_labels": ACTION_LABELS,
+            "filters": filters,
+            "page": page,
         }
         return templates.TemplateResponse("partials/role_form.html", context, status_code=422)
 
     owner = request.session.get("admin_name") or "system"
     form["permissions"] = build_permissions(form_data, owner)
     await role_service.update_role(role, form)
-    roles = await role_service.list_roles()
-    context = {**base_context(request), "roles": roles, "status_meta": STATUS_META}
+    context = await build_role_table_context(request, filters, page)
     response = templates.TemplateResponse("partials/role_table.html", context)
     response.headers["HX-Trigger"] = json.dumps(
         {
@@ -284,13 +412,14 @@ async def role_update(
 
 @router.delete("/rbac/roles/{slug}", response_class=HTMLResponse)
 async def role_delete(request: Request, slug: str) -> HTMLResponse:
+    request_values = await read_request_values(request)
+    filters, page = parse_role_filters(request_values)
     role = await role_service.get_role_by_slug(slug)
     if not role:
         raise HTTPException(status_code=404, detail="角色不存在")
 
     await role_service.delete_role(role)
-    roles = await role_service.list_roles()
-    context = {**base_context(request), "roles": roles, "status_meta": STATUS_META}
+    context = await build_role_table_context(request, filters, page)
     response = templates.TemplateResponse("partials/role_table.html", context)
     response.headers["HX-Trigger"] = json.dumps(
         {"rbac-toast": {"title": "已删除", "message": "角色已移除", "variant": "warning"}},

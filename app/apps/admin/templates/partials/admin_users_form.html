@@ -27,6 +27,12 @@
     hx-swap="outerHTML"
     hx-indicator="#modal-indicator"
   >
+    <input type="hidden" name="search_q" value="{{ filters.search_q }}" />
+    <input type="hidden" name="search_role" value="{{ filters.search_role }}" />
+    <input type="hidden" name="search_status" value="{{ filters.search_status }}" />
+    <input type="hidden" name="search_sort" value="{{ filters.search_sort }}" />
+    <input type="hidden" name="page" value="{{ page }}" />
+
     <div class="grid gap-4 md:grid-cols-2">
       <div>
         <label class="label">账号</label>

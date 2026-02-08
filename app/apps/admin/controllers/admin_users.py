@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 from datetime import datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, Mapping
 
 from beanie import PydanticObjectId
 from fastapi import APIRouter, Form, HTTPException, Request
@@ -35,6 +35,14 @@ STATUS_META: dict[str, dict[str, str]] = {
     "enabled": {"label": "启用", "color": "#2f855a"},
     "disabled": {"label": "禁用", "color": "#b7791f"},
 }
+
+ADMIN_SORT_OPTIONS: dict[str, str] = {
+    "updated_desc": "最近更新",
+    "updated_asc": "最早更新",
+    "username_asc": "账号 A-Z",
+}
+
+ADMIN_PAGE_SIZE = 10
 
 def base_context(request: Request) -> dict[str, Any]:
     return {
@@ -69,38 +77,135 @@ def form_errors(values: dict[str, Any], is_create: bool, role_slugs: set[str]) -
     return errors
 
 
-@router.get("/users", response_class=HTMLResponse)
-async def admin_users_page(request: Request) -> HTMLResponse:
-    items = await admin_user_service.list_admins()
+def parse_positive_int(value: Any, default: int = 1) -> int:
+    try:
+        parsed = int(str(value))
+    except (TypeError, ValueError):
+        return default
+    return parsed if parsed > 0 else default
+
+
+def parse_admin_filters(values: Mapping[str, Any]) -> tuple[dict[str, str], int]:
+    search_q = str(values.get("search_q") or values.get("q") or "").strip()
+    search_role = str(values.get("search_role") or "").strip()
+    search_status = str(values.get("search_status") or "").strip()
+    if search_status not in STATUS_META:
+        search_status = ""
+
+    search_sort = str(values.get("search_sort") or "updated_desc").strip()
+    if search_sort not in ADMIN_SORT_OPTIONS:
+        search_sort = "updated_desc"
+
+    page = parse_positive_int(values.get("page"), default=1)
+    return (
+        {
+            "search_q": search_q,
+            "search_role": search_role,
+            "search_status": search_status,
+            "search_sort": search_sort,
+        },
+        page,
+    )
+
+
+def build_pagination(total: int, page: int, page_size: int) -> dict[str, Any]:
+    total_pages = max((total + page_size - 1) // page_size, 1)
+    current = min(max(page, 1), total_pages)
+    start_page = max(current - 2, 1)
+    end_page = min(start_page + 4, total_pages)
+    start_page = max(end_page - 4, 1)
+
+    if total == 0:
+        start_item = 0
+        end_item = 0
+    else:
+        start_item = (current - 1) * page_size + 1
+        end_item = min(current * page_size, total)
+
+    return {
+        "page": current,
+        "page_size": page_size,
+        "total": total,
+        "total_pages": total_pages,
+        "has_prev": current > 1,
+        "has_next": current < total_pages,
+        "prev_page": current - 1,
+        "next_page": current + 1,
+        "pages": list(range(start_page, end_page + 1)),
+        "start_item": start_item,
+        "end_item": end_item,
+    }
+
+
+def filter_admin_items(items: list[Any], filters: dict[str, str]) -> list[Any]:
+    filtered = items
+    if filters["search_role"]:
+        filtered = [item for item in filtered if item.role_slug == filters["search_role"]]
+    if filters["search_status"]:
+        filtered = [item for item in filtered if item.status == filters["search_status"]]
+
+    sort_key = filters["search_sort"]
+    if sort_key == "updated_asc":
+        filtered = sorted(filtered, key=lambda item: item.updated_at)
+    elif sort_key == "username_asc":
+        filtered = sorted(filtered, key=lambda item: item.username.lower())
+    else:
+        filtered = sorted(filtered, key=lambda item: item.updated_at, reverse=True)
+    return filtered
+
+
+async def read_request_values(request: Request) -> dict[str, str]:
+    values: dict[str, str] = {key: value for key, value in request.query_params.items()}
+    if request.method == "GET":
+        return values
+
+    content_type = request.headers.get("content-type", "")
+    if "application/x-www-form-urlencoded" not in content_type and "multipart/form-data" not in content_type:
+        return values
+
+    form_data = await request.form()
+    for key, value in form_data.items():
+        if isinstance(value, str):
+            values[key] = value
+    return values
+
+
+async def build_admin_table_context(
+    request: Request,
+    filters: dict[str, str],
+    page: int,
+) -> dict[str, Any]:
     roles = await role_service.list_roles()
     role_map = {item.slug: item.name for item in roles}
-    stats = {
-        "total": len(items),
-        "enabled": sum(1 for item in items if item.status == "enabled"),
-        "disabled": sum(1 for item in items if item.status == "disabled"),
-        "latest": fmt_dt(items[0].updated_at) if items else None,
-    }
-    context = {
+    items = await admin_user_service.list_admins(filters["search_q"] or None)
+    filtered_items = filter_admin_items(items, filters)
+    pagination = build_pagination(len(filtered_items), page, ADMIN_PAGE_SIZE)
+    start = (pagination["page"] - 1) * ADMIN_PAGE_SIZE
+    paged_items = filtered_items[start : start + ADMIN_PAGE_SIZE]
+
+    return {
         **base_context(request),
-        "items": items,
-        "stats": stats,
+        "items": paged_items,
         "status_meta": STATUS_META,
         "role_map": role_map,
+        "roles": roles,
+        "filters": filters,
+        "pagination": pagination,
     }
+
+
+@router.get("/users", response_class=HTMLResponse)
+async def admin_users_page(request: Request) -> HTMLResponse:
+    filters, page = parse_admin_filters(request.query_params)
+    context = await build_admin_table_context(request, filters, page)
+    context["admin_sort_options"] = ADMIN_SORT_OPTIONS
     return templates.TemplateResponse("pages/admin_users.html", context)
 
 
 @router.get("/users/table", response_class=HTMLResponse)
-async def admin_users_table(request: Request, q: str | None = None) -> HTMLResponse:
-    items = await admin_user_service.list_admins(q)
-    roles = await role_service.list_roles()
-    role_map = {item.slug: item.name for item in roles}
-    context = {
-        **base_context(request),
-        "items": items,
-        "status_meta": STATUS_META,
-        "role_map": role_map,
-    }
+async def admin_users_table(request: Request) -> HTMLResponse:
+    filters, page = parse_admin_filters(request.query_params)
+    context = await build_admin_table_context(request, filters, page)
     return templates.TemplateResponse("partials/admin_users_table.html", context)
 
 
@@ -109,6 +214,7 @@ async def admin_users_new(request: Request) -> HTMLResponse:
     roles = await role_service.list_roles()
     default_slug = roles[0].slug if roles else "admin"
     form = build_form_data({"role_slug": default_slug})
+    filters, page = parse_admin_filters(request.query_params)
     context = {
         **base_context(request),
         "mode": "create",
@@ -117,6 +223,8 @@ async def admin_users_new(request: Request) -> HTMLResponse:
         "errors": [],
         "status_meta": STATUS_META,
         "roles": roles,
+        "filters": filters,
+        "page": page,
     }
     return templates.TemplateResponse("partials/admin_users_form.html", context)
 
@@ -138,6 +246,7 @@ async def admin_users_edit(request: Request, item_id: PydanticObjectId) -> HTMLR
             "password": "",
         }
     )
+    filters, page = parse_admin_filters(request.query_params)
     context = {
         **base_context(request),
         "mode": "edit",
@@ -146,6 +255,8 @@ async def admin_users_edit(request: Request, item_id: PydanticObjectId) -> HTMLR
         "errors": [],
         "status_meta": STATUS_META,
         "roles": roles,
+        "filters": filters,
+        "page": page,
     }
     return templates.TemplateResponse("partials/admin_users_form.html", context)
 
@@ -160,6 +271,8 @@ async def admin_users_create(
     status: str = Form("enabled"),
     password: str = Form(""),
 ) -> HTMLResponse:
+    request_values = await read_request_values(request)
+    filters, page = parse_admin_filters(request_values)
     roles = await role_service.list_roles()
     role_slugs = {item.slug for item in roles}
     form = build_form_data(
@@ -186,6 +299,8 @@ async def admin_users_create(
             "errors": errors,
             "status_meta": STATUS_META,
             "roles": roles,
+            "filters": filters,
+            "page": page,
         }
         return templates.TemplateResponse(
             "partials/admin_users_form.html", context, status_code=422
@@ -201,14 +316,7 @@ async def admin_users_create(
     }
     await admin_user_service.create_admin(payload)
 
-    items = await admin_user_service.list_admins()
-    role_map = {item.slug: item.name for item in roles}
-    context = {
-        **base_context(request),
-        "items": items,
-        "status_meta": STATUS_META,
-        "role_map": role_map,
-    }
+    context = await build_admin_table_context(request, filters, page)
     response = templates.TemplateResponse("partials/admin_users_table.html", context)
     response.headers["HX-Trigger"] = json.dumps(
         {
@@ -234,6 +342,8 @@ async def admin_users_update(
     status: str = Form("enabled"),
     password: str = Form(""),
 ) -> HTMLResponse:
+    request_values = await read_request_values(request)
+    filters, page = parse_admin_filters(request_values)
     item = await admin_user_service.get_admin(item_id)
     if not item:
         raise HTTPException(status_code=404, detail="账号不存在")
@@ -261,6 +371,8 @@ async def admin_users_update(
             "errors": errors,
             "status_meta": STATUS_META,
             "roles": roles,
+            "filters": filters,
+            "page": page,
         }
         return templates.TemplateResponse(
             "partials/admin_users_form.html", context, status_code=422
@@ -277,14 +389,7 @@ async def admin_users_update(
     if str(item.id) == str(request.session.get("admin_id")):
         request.session["admin_name"] = item.display_name
 
-    items = await admin_user_service.list_admins()
-    role_map = {item.slug: item.name for item in roles}
-    context = {
-        **base_context(request),
-        "items": items,
-        "status_meta": STATUS_META,
-        "role_map": role_map,
-    }
+    context = await build_admin_table_context(request, filters, page)
     response = templates.TemplateResponse("partials/admin_users_table.html", context)
     response.headers["HX-Trigger"] = json.dumps(
         {
@@ -302,6 +407,8 @@ async def admin_users_update(
 
 @router.delete("/users/{item_id}", response_class=HTMLResponse)
 async def admin_users_delete(request: Request, item_id: PydanticObjectId) -> HTMLResponse:
+    request_values = await read_request_values(request)
+    filters, page = parse_admin_filters(request_values)
     item = await admin_user_service.get_admin(item_id)
     if not item:
         raise HTTPException(status_code=404, detail="账号不存在")
@@ -310,15 +417,7 @@ async def admin_users_delete(request: Request, item_id: PydanticObjectId) -> HTM
         raise HTTPException(status_code=400, detail="不能删除当前登录账号")
 
     await admin_user_service.delete_admin(item)
-    items = await admin_user_service.list_admins()
-    roles = await role_service.list_roles()
-    role_map = {item.slug: item.name for item in roles}
-    context = {
-        **base_context(request),
-        "items": items,
-        "status_meta": STATUS_META,
-        "role_map": role_map,
-    }
+    context = await build_admin_table_context(request, filters, page)
     response = templates.TemplateResponse("partials/admin_users_table.html", context)
     response.headers["HX-Trigger"] = json.dumps(
         {

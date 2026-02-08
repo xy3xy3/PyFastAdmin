@@ -56,6 +56,44 @@ uv run uvicorn app.main:app --reload --port ${APP_PORT:-8000}
 
 首次启动会自动创建默认管理员（用户名/密码来自 `.env` 的 `ADMIN_USER`、`ADMIN_PASS`）。
 
+
+## 测试（单元 / 集成 / E2E）
+
+> 测试会使用 **独立 MongoDB 数据库**，不污染主库。
+
+1. 设置测试库（建议写入 `.env` 或 shell 环境）
+
+```bash
+export TEST_MONGO_URL=${MONGO_URL:-mongodb://localhost:27017}
+export TEST_MONGO_DB=pyfastadmin_test
+export TEST_E2E_MONGO_DB=pyfastadmin_e2e_test
+```
+
+2. 安装测试依赖（已通过 `uv add --dev` 管理）
+
+```bash
+uv sync
+```
+
+3. 运行测试
+
+```bash
+# 单元测试（纯逻辑）
+uv run pytest -m unit
+
+# 集成测试（需要 MongoDB）
+uv run pytest -m integration
+
+# 端到端（Playwright）
+uv run playwright install chromium
+uv run pytest -m e2e
+```
+
+说明：
+- `tests/unit/`：不依赖数据库
+- `tests/integration/`：自动清理 `TEST_MONGO_DB`
+- `tests/e2e/`：启动独立服务并使用 `TEST_E2E_MONGO_DB`
+
 ## 生产部署（含 uv Dockerfile）
 
 ```bash

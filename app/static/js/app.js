@@ -41,7 +41,17 @@
     showToast(event.detail || {});
   });
 
-  document.body.addEventListener("htmx:responseError", () => {
+  document.body.addEventListener("htmx:responseError", (event) => {
+    const xhr = event.detail?.xhr;
+    if (xhr?.status === 403) {
+      showToast({
+        title: "无权限",
+        message: xhr.responseText || "当前账号没有执行该操作的权限。",
+        variant: "error",
+      });
+      return;
+    }
+
     showToast({
       title: "请求失败",
       message: "服务器暂时不可用，请稍后再试。",

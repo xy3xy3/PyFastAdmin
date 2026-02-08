@@ -1,22 +1,19 @@
 {% extends "base.html" %}
 
 {% block content %}
-<div class="mx-auto max-w-6xl space-y-6 px-4 pb-16 pt-10 md:px-8">
+<div class="space-y-4">
   <section
-    class="card p-6"
+    class="card p-5"
     x-data='{{ {"search_q": filters.search_q, "search_role": filters.search_role, "search_status": filters.search_status, "search_sort": filters.search_sort, "page": pagination.page}|tojson }}'
   >
-    <div class="flex flex-wrap items-start justify-between gap-3">
-      <div>
-        <h1 class="font-display text-2xl text-ink">管理员搜索</h1>
-        <p class="mt-1 text-sm text-muted">支持角色、状态和关键词检索，直接点搜索就是刷新列表。</p>
-      </div>
-      <div class="chip">Admin</div>
+    <div class="flex items-center justify-between gap-3">
+      <h1 class="text-lg font-semibold text-slate-900">查询条件</h1>
+      <p class="text-sm text-slate-500">支持账号、角色、状态等组合筛选</p>
     </div>
 
     <form
       id="admin-search-form"
-      class="mt-4 grid gap-4 md:grid-cols-5"
+      class="mt-4 grid gap-4 md:grid-cols-12"
       hx-get="/admin/users/table"
       hx-target="#admin-table"
       hx-swap="outerHTML"
@@ -24,16 +21,18 @@
       x-on:submit="page = 1"
     >
       <input type="hidden" name="page" x-model="page" />
-      <div class="md:col-span-2">
+
+      <div class="md:col-span-5">
         <label class="label">关键词</label>
         <input
           name="search_q"
           x-model="search_q"
           class="input"
-          placeholder="输入账号/姓名/邮箱"
+          placeholder="请输入账号/姓名/邮箱"
         />
       </div>
-      <div>
+
+      <div class="md:col-span-3">
         <label class="label">角色</label>
         <select name="search_role" x-model="search_role" class="input">
           <option value="">全部</option>
@@ -42,7 +41,8 @@
           {% endfor %}
         </select>
       </div>
-      <div>
+
+      <div class="md:col-span-2">
         <label class="label">状态</label>
         <select name="search_status" x-model="search_status" class="input">
           <option value="">全部</option>
@@ -51,7 +51,8 @@
           {% endfor %}
         </select>
       </div>
-      <div>
+
+      <div class="md:col-span-2">
         <label class="label">排序</label>
         <select name="search_sort" x-model="search_sort" class="input">
           {% for key, label in admin_sort_options.items() %}
@@ -59,7 +60,8 @@
           {% endfor %}
         </select>
       </div>
-      <div class="md:col-span-5 flex flex-wrap justify-end gap-3">
+
+      <div class="md:col-span-12 flex flex-wrap justify-end gap-3">
         <button
           type="button"
           class="btn-ghost"

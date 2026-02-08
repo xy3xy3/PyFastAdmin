@@ -4,12 +4,12 @@ module.exports = {
   theme: {
     extend: {
       fontFamily: {
-        display: ["\"ZCOOL XiaoWei\"", "\"Noto Serif SC\"", "\"STSong\"", "serif"],
-        body: ["\"LXGW WenKai\"", "\"Noto Sans SC\"", "\"PingFang SC\"", "\"Microsoft YaHei\"", "sans-serif"],
+        display: ["\"Inter\"", "\"Noto Sans SC\"", "\"PingFang SC\"", "\"Microsoft YaHei\"", "sans-serif"],
+        body: ["\"Inter\"", "\"Noto Sans SC\"", "\"PingFang SC\"", "\"Microsoft YaHei\"", "sans-serif"],
       },
       boxShadow: {
-        ink: "0 20px 40px rgba(17, 20, 24, 0.18)",
-        glow: "0 0 0 1px rgba(192, 64, 43, 0.25), 0 8px 26px rgba(192, 64, 43, 0.18)",
+        ink: "0 8px 24px rgba(15, 23, 42, 0.12)",
+        glow: "0 0 0 1px rgba(22, 119, 255, 0.24), 0 6px 18px rgba(22, 119, 255, 0.2)",
       },
       borderRadius: {
         blob: "2.25rem",

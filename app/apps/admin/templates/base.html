@@ -7,7 +7,6 @@
     <link rel="stylesheet" href="/static/css/app.css" />
   </head>
   <body class="antialiased">
-    <!-- 说明：本项目为前后端不分离的管理端演示，所有资源本地化。 -->
     <div
       id="app"
       x-data="{ modalOpen: false }"
@@ -16,50 +15,101 @@
       class="relative"
     >
       {% if current_admin %}
-        <header class="sticky top-0 z-30 border-b border-black/10 bg-white/80 backdrop-blur">
-          <div class="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-3 px-4 py-4 md:px-8">
-            <div>
-              <p class="text-xs uppercase tracking-widest text-muted">Admin Console</p>
-              <p class="text-lg font-semibold text-ink">欢迎，{{ current_admin }}</p>
+        {% set path = request.url.path %}
+        {% set crumb_parent = "控制台" %}
+        {% set crumb_title = "首页" %}
+        {% if path.startswith('/admin/rbac') %}
+          {% set crumb_parent = "权限管理" %}
+          {% set crumb_title = "RBAC 权限" %}
+        {% elif path.startswith('/admin/users') %}
+          {% set crumb_parent = "权限管理" %}
+          {% set crumb_title = "管理员管理" %}
+        {% elif path.startswith('/admin/profile') %}
+          {% set crumb_parent = "个人设置" %}
+          {% set crumb_title = "个人资料" %}
+        {% elif path.startswith('/admin/password') %}
+          {% set crumb_parent = "个人设置" %}
+          {% set crumb_title = "修改密码" %}
+        {% elif path.startswith('/admin/config') %}
+          {% set crumb_parent = "系统设置" %}
+          {% set crumb_title = "系统配置" %}
+        {% endif %}
+
+        <div class="admin-shell">
+          <aside class="admin-sider">
+            <div class="admin-brand">
+              <div class="brand-dot"></div>
+              <div>
+                <p class="text-base font-semibold text-slate-900">PyFastAdmin</p>
+                <p class="text-xs text-slate-400">Ant Pro Style</p>
+              </div>
             </div>
-            <nav class="flex flex-wrap gap-2 text-sm">
-              <a class="btn-ghost px-4" href="/admin/rbac">RBAC 权限</a>
-              <a class="btn-ghost px-4" href="/admin/users">管理员</a>
-              <a class="btn-ghost px-4" href="/admin/profile">个人资料</a>
-              <a class="btn-ghost px-4" href="/admin/password">修改密码</a>
-              <a class="btn-ghost px-4" href="/admin/config">系统配置</a>
-              <a class="btn-primary px-4" href="/admin/logout">退出</a>
+
+            <nav class="admin-nav">
+              <div class="sider-group">权限管理</div>
+              <div class="sider-tree">
+                <a class="sider-link {% if path.startswith('/admin/rbac') %}sider-link-active{% endif %}" href="/admin/rbac">RBAC 权限</a>
+                <a class="sider-link {% if path.startswith('/admin/users') %}sider-link-active{% endif %}" href="/admin/users">管理员管理</a>
+              </div>
+
+              <div class="sider-group mt-6">个人设置</div>
+              <div class="sider-tree">
+                <a class="sider-link {% if path.startswith('/admin/profile') %}sider-link-active{% endif %}" href="/admin/profile">个人资料</a>
+                <a class="sider-link {% if path.startswith('/admin/password') %}sider-link-active{% endif %}" href="/admin/password">修改密码</a>
+                <a class="sider-link {% if path.startswith('/admin/config') %}sider-link-active{% endif %}" href="/admin/config">系统配置</a>
+              </div>
             </nav>
-          </div>
-        </header>
+          </aside>
+
+          <div class="admin-workspace">
+            <header class="admin-topbar">
+              <div>
+                <p class="text-xs uppercase tracking-wider text-slate-400">ADMIN CONSOLE</p>
+                <div class="breadcrumb">
+                  <span class="breadcrumb-muted">首页</span>
+                  <span class="breadcrumb-sep">/</span>
+                  <span class="breadcrumb-muted">{{ crumb_parent }}</span>
+                  <span class="breadcrumb-sep">/</span>
+                  <span class="breadcrumb-current">{{ crumb_title }}</span>
+                </div>
+              </div>
+
+              <div class="flex items-center gap-3">
+                <a class="top-link" href="/admin/users">用户管理</a>
+                <div class="user-pill">
+                  <span class="user-avatar">{{ current_admin[0] if current_admin else "A" }}</span>
+                  <span class="text-sm text-slate-600">{{ current_admin }}</span>
+                </div>
+                <a class="btn-ghost" href="/admin/logout">退出</a>
+              </div>
+            </header>
+
+            <main class="admin-content">
       {% endif %}
+
       {% block content %}{% endblock %}
 
-      <!-- 弹窗：用于新建/编辑 -->
+      {% if current_admin %}
+            </main>
+          </div>
+        </div>
+      {% endif %}
+
       <div
-        class="fixed inset-0 z-40 flex items-center justify-center bg-black/40 px-4"
+        class="fixed inset-0 z-40 flex items-center justify-center bg-slate-900/45 px-4"
         x-show="modalOpen"
         x-cloak
       >
         <div
-          class="card w-full max-w-2xl p-6 md:p-8"
+          class="w-full max-w-2xl rounded-lg border border-slate-200 bg-white p-6 shadow-ink md:p-8"
           x-on:click.outside="modalOpen = false"
         >
-          <div id="modal-body">
-            <!-- 这里由 HTMX 注入表单 -->
-          </div>
-          <div id="modal-indicator" class="htmx-indicator mt-3 text-sm text-muted">
-            正在提交...
-          </div>
+          <div id="modal-body"></div>
+          <div id="modal-indicator" class="htmx-indicator mt-3 text-sm text-slate-500">正在提交...</div>
         </div>
       </div>
 
-      <!-- Toast 提示 -->
-      <div
-        id="toast"
-        data-variant="success"
-        class="toast"
-      >
+      <div id="toast" data-variant="success" class="toast">
         <div class="toast-body">
           <div class="toast-dot"></div>
           <div>
@@ -72,7 +122,7 @@
 
     <div
       id="global-indicator"
-      class="htmx-indicator fixed bottom-6 right-6 z-40 rounded-full border border-black/10 bg-white/90 px-4 py-2 text-xs font-semibold text-muted shadow-ink"
+      class="htmx-indicator fixed bottom-6 right-6 z-40 rounded-md border border-slate-200 bg-white px-3 py-2 text-xs font-medium text-slate-500 shadow-ink"
     >
       正在处理...
     </div>

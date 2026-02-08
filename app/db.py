@@ -6,7 +6,7 @@ from motor.motor_asyncio import AsyncIOMotorClient
 from beanie import init_beanie
 
 from .config import MONGO_DB, MONGO_URL
-from .models import AdminUser, RbacPolicy
+from .models import AdminUser, RbacPolicy, ConfigItem
 
 _mongo_client: AsyncIOMotorClient | None = None
 
@@ -16,7 +16,8 @@ async def init_db() -> None:
     global _mongo_client
     _mongo_client = AsyncIOMotorClient(MONGO_URL)
     await init_beanie(
-        database=_mongo_client[MONGO_DB], document_models=[RbacPolicy, AdminUser]
+        database=_mongo_client[MONGO_DB],
+        document_models=[RbacPolicy, AdminUser, ConfigItem],
     )
 
 

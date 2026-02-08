@@ -11,6 +11,7 @@ from starlette.middleware.sessions import SessionMiddleware
 
 from .apps.admin.controllers.admin_users import router as admin_users_router
 from .apps.admin.controllers.auth import router as auth_router
+from .apps.admin.controllers.config import router as config_router
 from .apps.admin.controllers.rbac import router as admin_router
 from .config import APP_NAME, SECRET_KEY
 from .db import close_db, init_db
@@ -26,6 +27,7 @@ app.add_middleware(SessionMiddleware, secret_key=SECRET_KEY, session_cookie="pfa
 app.include_router(admin_router)
 app.include_router(auth_router)
 app.include_router(admin_users_router)
+app.include_router(config_router)
 
 
 @app.get("/")

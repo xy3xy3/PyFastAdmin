@@ -4,8 +4,10 @@ HTMX + Alpine.js + Tailwind + FastAPI + Jinja2 + Beanie 的不分离管理后台
 
 ## 功能
 - RBAC 权限管理（增删改查）
+- 权限树配置（按页面 URL/名称聚合）
 - 管理员管理（创建/编辑/禁用）
 - 登录、个人资料、修改密码场景页面
+- 系统配置（示例：SMTP）
 - 移动端/桌面端响应式布局
 - 所有静态资源本地化（HTMX/Alpine/Tailwind 编译产物均为本地）
 
@@ -46,9 +48,11 @@ uv run uvicorn app.main:app --reload --port ${APP_PORT:-8000}
 ```
 
 访问：http://localhost:8000/admin/rbac
+- 权限树配置：http://localhost:8000/admin/rbac/permissions
 - 管理员管理：http://localhost:8000/admin/users
 - 个人资料：http://localhost:8000/admin/profile
 - 修改密码：http://localhost:8000/admin/password
+- 系统配置：http://localhost:8000/admin/config
 
 首次启动会自动创建默认管理员（用户名/密码来自 `.env` 的 `ADMIN_USER`、`ADMIN_PASS`）。
 

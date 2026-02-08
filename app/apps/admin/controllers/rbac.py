@@ -11,6 +11,7 @@ from fastapi import APIRouter, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 
+from app.apps.admin.registry import ADMIN_TREE, iter_leaf_nodes
 from app.services import rbac_service
 
 BASE_DIR = Path(__file__).resolve().parents[1]
@@ -43,6 +44,19 @@ PRIORITY_META = {
     4: "高",
     5: "紧急",
 }
+
+ACTION_LABELS = {
+    "create": "新增",
+    "read": "查看",
+    "update": "编辑",
+    "delete": "删除",
+}
+
+ROLE_CHOICES = [
+    {"key": "super", "name": "超级管理员"},
+    {"key": "admin", "name": "管理员"},
+    {"key": "viewer", "name": "只读"},
+]
 
 
 def base_context(request: Request) -> dict[str, Any]:
@@ -140,6 +154,78 @@ async def rbac_new(request: Request) -> HTMLResponse:
         "priority_meta": PRIORITY_META,
     }
     return templates.TemplateResponse("partials/rbac_form.html", context)
+
+
+@router.get("/rbac/permissions", response_class=HTMLResponse)
+async def rbac_permissions_page(
+    request: Request, role_key: str = "admin", role_name: str | None = None
+) -> HTMLResponse:
+    checked_map = await rbac_service.get_role_permissions_map(role_key)
+    display_name = role_name
+    if not display_name:
+        display_name = next(
+            (item["name"] for item in ROLE_CHOICES if item["key"] == role_key),
+            role_key,
+        )
+    context = {
+        **base_context(request),
+        "tree": ADMIN_TREE,
+        "checked_map": checked_map,
+        "action_labels": ACTION_LABELS,
+        "role_key": role_key,
+        "role_name": display_name,
+        "role_choices": ROLE_CHOICES,
+        "saved": False,
+    }
+    return templates.TemplateResponse("pages/rbac_permissions.html", context)
+
+
+@router.post("/rbac/permissions", response_class=HTMLResponse)
+async def rbac_permissions_save(request: Request) -> HTMLResponse:
+    form = await request.form()
+    role_key = str(form.get("role_key", "")).strip()
+    role_name = str(form.get("role_name", "")).strip()
+    if not role_name:
+        role_name = next(
+            (item["name"] for item in ROLE_CHOICES if item["key"] == role_key),
+            role_key,
+        )
+    if not role_key:
+        checked_map = {}
+        context = {
+            **base_context(request),
+            "tree": ADMIN_TREE,
+            "checked_map": checked_map,
+            "action_labels": ACTION_LABELS,
+            "role_key": "",
+            "role_name": "",
+            "role_choices": ROLE_CHOICES,
+            "saved": False,
+            "error": "角色标识不能为空。",
+        }
+        return templates.TemplateResponse("pages/rbac_permissions.html", context, status_code=422)
+
+    owner = request.session.get("admin_name") or "system"
+    permissions: list[tuple[str, str, str]] = []
+    for node in iter_leaf_nodes(ADMIN_TREE):
+        actions = form.getlist(f"perm_{node['key']}")
+        for action in actions:
+            description = f"{node['name']} | {node['url']}"
+            permissions.append((node["key"], action, description))
+
+    await rbac_service.save_role_permissions(role_key, role_name, owner, permissions)
+    checked_map = await rbac_service.get_role_permissions_map(role_key)
+    context = {
+        **base_context(request),
+        "tree": ADMIN_TREE,
+        "checked_map": checked_map,
+        "action_labels": ACTION_LABELS,
+        "role_key": role_key,
+        "role_name": role_name,
+        "role_choices": ROLE_CHOICES,
+        "saved": True,
+    }
+    return templates.TemplateResponse("pages/rbac_permissions.html", context)
 
 
 @router.get("/rbac/{item_id}/edit", response_class=HTMLResponse)

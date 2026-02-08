@@ -24,6 +24,9 @@
               <td class="px-4 py-3">
                 <div class="font-semibold text-ink">{{ item.resource }}</div>
                 <div class="text-xs text-muted">{{ item.action }}</div>
+                {% if item.description %}
+                  <div class="text-xs text-muted">{{ item.description }}</div>
+                {% endif %}
               </td>
               <td class="px-4 py-3 text-muted">{{ item.owner }}</td>
               <td class="px-4 py-3">

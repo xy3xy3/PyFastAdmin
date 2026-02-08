@@ -70,3 +70,38 @@ async def update_policy(policy: RbacPolicy, payload: dict[str, Any]) -> RbacPoli
 
 async def delete_policy(policy: RbacPolicy) -> None:
     await policy.delete()
+
+
+async def get_role_permissions_map(role_key: str) -> dict[str, set[str]]:
+    items = await RbacPolicy.find(RbacPolicy.role_key == role_key).to_list()
+    mapping: dict[str, set[str]] = {}
+    for item in items:
+        mapping.setdefault(item.resource, set()).add(item.action)
+    return mapping
+
+
+async def save_role_permissions(
+    role_key: str,
+    role_name: str,
+    owner: str,
+    permissions: list[tuple[str, str, str]],
+) -> None:
+    """保存角色权限（resource, action, description）。"""
+    await RbacPolicy.find(RbacPolicy.role_key == role_key).delete()
+    docs = []
+    for resource, action, description in permissions:
+        docs.append(
+            RbacPolicy(
+                role_key=role_key,
+                role_name=role_name,
+                resource=resource,
+                action=action,
+                owner=owner,
+                priority=3,
+                status="enabled",
+                tags=[],
+                description=description,
+            )
+        )
+    if docs:
+        await RbacPolicy.insert_many(docs)

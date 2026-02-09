@@ -46,7 +46,11 @@ async def config_page(request: Request) -> HTMLResponse:
     return templates.TemplateResponse("pages/config.html", context)
 
 
-@router.post("/config", response_class=HTMLResponse)
+@router.post(
+    "/config",
+    response_class=HTMLResponse,
+    openapi_extra={"permission": {"resource": "config", "action": "update"}},
+)
 async def config_save(
     request: Request,
     smtp_host: str = Form(""),

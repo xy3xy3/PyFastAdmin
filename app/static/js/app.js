@@ -41,6 +41,17 @@
     showToast(event.detail || {});
   });
 
+  const getCsrfToken = () => {
+    const meta = document.querySelector('meta[name="csrf-token"]');
+    return (meta?.getAttribute("content") || "").trim();
+  };
+
+  document.body.addEventListener("htmx:configRequest", (event) => {
+    const token = getCsrfToken();
+    if (!token) return;
+    event.detail.headers["X-CSRF-Token"] = token;
+  });
+
   document.body.addEventListener("htmx:responseError", (event) => {
     const xhr = event.detail?.xhr;
     if (xhr?.status === 403) {

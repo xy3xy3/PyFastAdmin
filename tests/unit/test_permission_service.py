@@ -161,3 +161,28 @@ async def test_resolve_permission_map_returns_empty_for_disabled_role(monkeypatc
     permission_map = await permission_service.resolve_permission_map(request)
 
     assert permission_map == {}
+
+
+@pytest.mark.unit
+def test_build_permission_flags_contains_dynamic_resource_map() -> None:
+    permission_map = {
+        "dashboard_home": {"read"},
+        "profile": {"read"},
+    }
+
+    flags = permission_service.build_permission_flags(permission_map)
+
+    assert "resources" in flags
+    assert flags["resources"]["dashboard_home"]["read"] is True
+    assert flags["resources"]["admin_users"]["read"] is False
+    assert flags["menus"]["accounts"] is True
+
+
+@pytest.mark.unit
+def test_required_permission_prefers_explicit_route_declaration() -> None:
+    assert permission_service.required_permission("/admin/users", "POST") == ("admin_users", "create")
+    assert permission_service.required_permission("/admin/users/507f1f77bcf86cd799439011", "POST") == (
+        "admin_users",
+        "update",
+    )
+    assert permission_service.required_permission("/admin/config", "POST") == ("config", "update")

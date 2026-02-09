@@ -28,6 +28,10 @@ _RESOURCE_URLS: list[tuple[str, str]] = sorted(
     reverse=True,
 )
 
+_RESOURCE_BASE_URLS: dict[str, str] = {
+    resource: url for url, resource in _RESOURCE_URLS
+}
+
 def _normalize_permission_items(items: list[Any] | None) -> dict[str, set[str]]:
     permission_map: dict[str, set[str]] = {}
     for item in items or []:
@@ -115,19 +119,35 @@ def build_resource_flags(permission_map: dict[str, set[str]], resource: str) -> 
 
 
 def build_permission_flags(permission_map: dict[str, set[str]]) -> dict[str, Any]:
-    flags = {
-        "dashboard": build_resource_flags(permission_map, "dashboard_home"),
-        "rbac": build_resource_flags(permission_map, "rbac"),
-        "admin_users": build_resource_flags(permission_map, "admin_users"),
-        "profile": build_resource_flags(permission_map, "profile"),
-        "password": build_resource_flags(permission_map, "password"),
-        "config": build_resource_flags(permission_map, "config"),
-        "operation_logs": build_resource_flags(permission_map, "operation_logs"),
+    """构建权限标记，资源位自动从注册树推导。"""
+
+    resource_flags = {
+        node["key"]: build_resource_flags(permission_map, node["key"])
+        for node in iter_leaf_nodes(ADMIN_TREE)
     }
+
+    flags: dict[str, Any] = {
+        "resources": resource_flags,
+        **resource_flags,
+    }
+
+    # 为历史模板保留 dashboard 别名，避免改动多处页面。
+    flags.setdefault("dashboard", resource_flags.get("dashboard_home", build_resource_flags(permission_map, "dashboard_home")))
+
+    menu_flags: dict[str, bool] = {}
+    for group in ADMIN_TREE:
+        leaf_keys = [node["key"] for node in iter_leaf_nodes([group])]
+        menu_flags[group["key"]] = any(resource_flags.get(key, {}).get("read", False) for key in leaf_keys)
+
+    # 兼容旧模板菜单键，降低迁移成本。
+    menu_flags["security"] = menu_flags.get("security", False)
+    menu_flags["system"] = menu_flags.get("system", False)
+    menu_flags["profile"] = (
+        resource_flags.get("profile", {}).get("read", False)
+        or resource_flags.get("password", {}).get("read", False)
+    )
     flags["menus"] = {
-        "security": flags["rbac"]["read"] or flags["admin_users"]["read"],
-        "system": flags["config"]["read"] or flags["operation_logs"]["read"],
-        "profile": flags["profile"]["read"] or flags["password"]["read"],
+        **menu_flags,
     }
     return flags
 
@@ -176,6 +196,7 @@ def _infer_action(resource: str, method: str, path: str) -> str | None:
 
     allowed_actions = _RESOURCE_ACTIONS.get(resource, set())
     normalized = _normalize_path(path)
+    base_url = _RESOURCE_BASE_URLS.get(resource, "")
 
     if method == "GET":
         if normalized.endswith("/new") and "create" in allowed_actions:
@@ -187,20 +208,48 @@ def _infer_action(resource: str, method: str, path: str) -> str | None:
     if method == "DELETE":
         return "delete" if "delete" in allowed_actions else None
 
-    if method not in {"POST", "PUT", "PATCH"}:
+    if method in {"PUT", "PATCH"}:
+        return "update" if "update" in allowed_actions else None
+
+    if method != "POST":
         return None
 
+    if normalized.endswith("/new") and "create" in allowed_actions:
+        return "create"
     if normalized.endswith("/edit") and "update" in allowed_actions:
         return "update"
+    if normalized.endswith("/delete") and "delete" in allowed_actions:
+        return "delete"
     if "{" in path and "}" in path and "update" in allowed_actions:
         return "update"
-    if "create" not in allowed_actions and "update" in allowed_actions:
-        return "update"
-    if "create" in allowed_actions:
-        return "create"
-    if "update" in allowed_actions:
-        return "update"
+
+    if normalized == base_url:
+        if "create" in allowed_actions:
+            return "create"
+        if "update" in allowed_actions:
+            return "update"
+
     return None
+
+
+def _resolve_explicit_permission(route: APIRoute, method: str) -> tuple[str, str] | None:
+    """从路由声明中读取显式权限映射，优先于自动推断。"""
+
+    meta = (route.openapi_extra or {}).get("permission")
+    if not isinstance(meta, dict):
+        return None
+
+    scoped = meta.get(method.upper(), meta)
+    if not isinstance(scoped, dict):
+        return None
+
+    resource = str(scoped.get("resource") or "").strip()
+    action = str(scoped.get("action") or "").strip()
+    if not resource or not action:
+        return None
+    if action not in _RESOURCE_ACTIONS.get(resource, set()):
+        return None
+    return (resource, action)
 
 
 @lru_cache(maxsize=1)
@@ -229,14 +278,20 @@ def _build_permission_rules() -> tuple[PermissionRouteRule, ...]:
         path_regex = _compile_route_regex(route.path)
 
         for method in methods:
-            action = _infer_action(resource, method, route.path)
-            if not action:
-                continue
+            explicit = _resolve_explicit_permission(route, method)
+            if explicit is not None:
+                resource_key, action = explicit
+            else:
+                action = _infer_action(resource, method, route.path)
+                resource_key = resource
+                if not action:
+                    continue
+
             rules.append(
                 PermissionRouteRule(
                     path_regex=path_regex,
                     method=method,
-                    resource=resource,
+                    resource=resource_key,
                     action=action,
                 )
             )

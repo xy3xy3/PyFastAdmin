@@ -8,7 +8,7 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
 from starlette.responses import HTMLResponse, RedirectResponse, Response
 
-from app.services import permission_service
+from app.services import csrf_service, permission_service
 
 
 def forbidden_response(request: Request, message: str) -> Response:
@@ -28,6 +28,18 @@ def forbidden_response(request: Request, message: str) -> Response:
     return HTMLResponse(content=content, status_code=403)
 
 
+def should_enforce_csrf(request: Request, path: str) -> bool:
+    """判断当前请求是否需要执行 CSRF 校验。"""
+
+    if not path.startswith("/admin"):
+        return False
+    if csrf_service.is_safe_method(request.method):
+        return False
+
+    # 登录表单与已登录会话都必须进行 CSRF 校验。
+    return path.startswith("/admin/login") or bool(request.session.get("admin_id"))
+
+
 class AdminAuthMiddleware(BaseHTTPMiddleware):
     """简单的 Session 鉴权中间件。"""
 
@@ -37,6 +49,12 @@ class AdminAuthMiddleware(BaseHTTPMiddleware):
 
     async def dispatch(self, request: Request, call_next) -> Response:
         path = request.url.path
+
+        if path.startswith("/admin"):
+            request.state.csrf_token = csrf_service.ensure_csrf_token(request.session)
+            if should_enforce_csrf(request, path):
+                if not await csrf_service.validate_request_token(request, request.state.csrf_token):
+                    return forbidden_response(request, "CSRF 校验失败，请刷新页面后重试。")
 
         if path.startswith("/static"):
             return await call_next(request)

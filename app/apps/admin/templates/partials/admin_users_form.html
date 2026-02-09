@@ -27,6 +27,7 @@
     hx-swap="outerHTML"
     hx-indicator="#modal-indicator"
   >
+    <input type="hidden" name="csrf_token" value="{{ request.state.csrf_token or '' }}" />
     <input type="hidden" name="search_q" value="{{ filters.search_q }}" />
     <input type="hidden" name="search_role" value="{{ filters.search_role }}" />
     <input type="hidden" name="search_status" value="{{ filters.search_status }}" />

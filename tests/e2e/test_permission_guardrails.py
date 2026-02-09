@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import re
 from datetime import datetime, timezone
 
 import httpx
@@ -21,15 +22,30 @@ def _login_http_client(base_url: str, username: str, password: str) -> httpx.Cli
     """登录后台并返回带会话 Cookie 的 HTTP 客户端。"""
 
     client = httpx.Client(base_url=base_url, follow_redirects=False)
+    login_page = client.get("/admin/login")
+    assert login_page.status_code == 200
+    token_match = re.search(r'name="csrf_token"\s+value="([^"]+)"', login_page.text)
+    assert token_match, "登录页未返回 CSRF Token"
+
     response = client.post(
         "/admin/login",
         data={
             "username": username,
             "password": password,
             "next": "/admin/dashboard",
+            "csrf_token": token_match.group(1),
         },
     )
     assert response.status_code == 302
+
+    dashboard_response = client.get(response.headers.get("location") or "/admin/dashboard")
+    assert dashboard_response.status_code == 200
+    dashboard_token_match = re.search(
+        r'<meta\s+name="csrf-token"\s+content="([^"]+)"',
+        dashboard_response.text,
+    )
+    assert dashboard_token_match, "仪表盘页未返回 CSRF Token"
+    client.headers["X-CSRF-Token"] = dashboard_token_match.group(1)
     return client
 
 

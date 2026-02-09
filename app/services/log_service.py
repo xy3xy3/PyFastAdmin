@@ -11,6 +11,7 @@ from app.models.operation_log import utc_now
 from app.services import config_service
 
 MODULE_LABELS: dict[str, str] = {
+    "auth": "账号安全",
     "rbac": "RBAC 权限",
     "admin_users": "管理员管理",
     "config": "系统配置",

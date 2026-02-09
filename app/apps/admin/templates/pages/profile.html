@@ -22,6 +22,7 @@
     {% endif %}
 
     <form class="mt-4 grid gap-4" method="post" action="/admin/profile">
+      <input type="hidden" name="csrf_token" value="{{ request.state.csrf_token or '' }}" />
       <div>
         <label class="label">账号</label>
         <input class="input cursor-not-allowed bg-slate-50 text-slate-500" value="{{ admin.username }}" readonly />

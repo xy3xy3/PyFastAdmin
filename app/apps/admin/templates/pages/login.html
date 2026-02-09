@@ -3,6 +3,7 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="csrf-token" content="{{ request.state.csrf_token or '' }}" />
     <title>管理员登录</title>
     <link rel="stylesheet" href="/static/css/app.css" />
   </head>
@@ -34,6 +35,7 @@
           {% endif %}
 
           <form class="mt-6 grid gap-4" method="post" action="/admin/login">
+            <input type="hidden" name="csrf_token" value="{{ request.state.csrf_token or '' }}" />
             <input type="hidden" name="next" value="{{ next }}" />
             <div>
               <label class="label" for="login-username">账号</label>

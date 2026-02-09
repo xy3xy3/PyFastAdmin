@@ -268,7 +268,11 @@ async def admin_users_edit(request: Request, item_id: PydanticObjectId) -> HTMLR
     return templates.TemplateResponse("partials/admin_users_form.html", context)
 
 
-@router.post("/users", response_class=HTMLResponse)
+@router.post(
+    "/users",
+    response_class=HTMLResponse,
+    openapi_extra={"permission": {"resource": "admin_users", "action": "create"}},
+)
 async def admin_users_create(
     request: Request,
     username: str = Form(""),
@@ -347,7 +351,11 @@ async def admin_users_create(
     return response
 
 
-@router.post("/users/{item_id}", response_class=HTMLResponse)
+@router.post(
+    "/users/{item_id}",
+    response_class=HTMLResponse,
+    openapi_extra={"permission": {"resource": "admin_users", "action": "update"}},
+)
 async def admin_users_update(
     request: Request,
     item_id: PydanticObjectId,
@@ -428,7 +436,11 @@ async def admin_users_update(
     return response
 
 
-@router.delete("/users/{item_id}", response_class=HTMLResponse)
+@router.delete(
+    "/users/{item_id}",
+    response_class=HTMLResponse,
+    openapi_extra={"permission": {"resource": "admin_users", "action": "delete"}},
+)
 async def admin_users_delete(request: Request, item_id: PydanticObjectId) -> HTMLResponse:
     request_values = await read_request_values(request)
     filters, page = parse_admin_filters(request_values)

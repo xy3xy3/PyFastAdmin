@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import re
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Mapping
@@ -12,6 +13,7 @@ from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 
 from app.apps.admin.registry import ADMIN_TREE, iter_leaf_nodes
+from app.models.role import ROLE_SLUG_PATTERN
 from app.services import admin_user_service, log_service, role_service
 
 BASE_DIR = Path(__file__).resolve().parents[1]
@@ -236,11 +238,14 @@ def build_checked_map_from_permissions(permissions: list[Any]) -> dict[str, set[
 
 
 def role_errors(values: dict[str, Any]) -> list[str]:
+    """校验角色基础字段，避免 slug 非法导致路由异常。"""
+
     errors: list[str] = []
     if len(values.get("name", "")) < 2:
         errors.append("角色名称至少 2 个字符")
-    if len(values.get("slug", "")) < 2:
-        errors.append("角色标识至少 2 个字符")
+    slug = str(values.get("slug", ""))
+    if not re.fullmatch(ROLE_SLUG_PATTERN, slug):
+        errors.append("角色标识仅支持小写字母、数字、下划线，且必须以字母开头")
     if values.get("status") not in STATUS_META:
         errors.append("状态不合法")
     return errors
@@ -347,7 +352,11 @@ async def role_edit(request: Request, slug: str) -> HTMLResponse:
     return templates.TemplateResponse("partials/role_form.html", context)
 
 
-@router.post("/rbac/roles", response_class=HTMLResponse)
+@router.post(
+    "/rbac/roles",
+    response_class=HTMLResponse,
+    openapi_extra={"permission": {"resource": "rbac", "action": "create"}},
+)
 async def role_create(
     request: Request,
 ) -> HTMLResponse:
@@ -357,7 +366,7 @@ async def role_create(
     form = build_role_form(
         {
             "name": str(form_data.get("name", "")).strip(),
-            "slug": str(form_data.get("slug", "")).strip(),
+            "slug": str(form_data.get("slug", "")).strip().lower(),
             "status": str(form_data.get("status", "enabled")),
             "description": str(form_data.get("description", "")).strip(),
         }
@@ -404,7 +413,11 @@ async def role_create(
     return response
 
 
-@router.post("/rbac/roles/{slug}", response_class=HTMLResponse)
+@router.post(
+    "/rbac/roles/{slug}",
+    response_class=HTMLResponse,
+    openapi_extra={"permission": {"resource": "rbac", "action": "update"}},
+)
 async def role_update(
     request: Request,
     slug: str,
@@ -464,7 +477,11 @@ async def role_update(
     return response
 
 
-@router.delete("/rbac/roles/{slug}", response_class=HTMLResponse)
+@router.delete(
+    "/rbac/roles/{slug}",
+    response_class=HTMLResponse,
+    openapi_extra={"permission": {"resource": "rbac", "action": "delete"}},
+)
 async def role_delete(request: Request, slug: str) -> HTMLResponse:
     request_values = await read_request_values(request)
     filters, page = parse_role_filters(request_values)

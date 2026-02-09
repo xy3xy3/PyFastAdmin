@@ -4,6 +4,7 @@
 <div class="space-y-4">
   {% set config_perm = request.state.permission_flags.config %}
   <form class="space-y-4" method="post" action="/admin/config">
+    <input type="hidden" name="csrf_token" value="{{ request.state.csrf_token or '' }}" />
     <section class="card p-5">
       <div class="flex items-center justify-between gap-3">
         <h1 class="text-lg font-semibold text-slate-900">站点设置</h1>

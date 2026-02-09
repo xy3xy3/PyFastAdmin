@@ -9,6 +9,8 @@ from beanie import Document
 from pymongo import IndexModel
 from pydantic import BaseModel, Field
 
+ROLE_SLUG_PATTERN = r"^[a-z][a-z0-9_]{1,31}$"
+
 
 def utc_now() -> datetime:
     return datetime.now(timezone.utc)
@@ -29,7 +31,7 @@ class Role(Document):
         description: str = Field(default="", max_length=120)
 
     name: str = Field(..., min_length=2, max_length=32)
-    slug: str = Field(..., min_length=2, max_length=32)
+    slug: str = Field(..., min_length=2, max_length=32, pattern=ROLE_SLUG_PATTERN)
     status: Literal["enabled", "disabled"] = "enabled"
     description: str = Field(default="", max_length=120)
     permissions: list[PermissionItem] = Field(default_factory=list)

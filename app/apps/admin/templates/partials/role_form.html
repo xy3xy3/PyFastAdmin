@@ -29,6 +29,7 @@
     hx-swap="outerHTML"
     hx-indicator="#modal-indicator"
   >
+    <input type="hidden" name="csrf_token" value="{{ request.state.csrf_token or '' }}" />
     <input type="hidden" name="search_q" value="{{ filters.search_q }}" />
     <input type="hidden" name="search_status" value="{{ filters.search_status }}" />
     <input type="hidden" name="search_sort" value="{{ filters.search_sort }}" />
@@ -45,6 +46,8 @@
           name="slug"
           class="input"
           required
+          pattern="^[a-z][a-z0-9_]{1,31}$"
+          title="仅支持小写字母、数字、下划线，且必须以字母开头"
           value="{{ form.slug }}"
           {% if mode == "edit" %}readonly{% endif %}
         />

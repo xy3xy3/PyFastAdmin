@@ -37,13 +37,13 @@
               <td class="px-4 py-3 text-slate-500">{{ item.created_at | fmt_dt }}</td>
               <td class="px-4 py-3">
                 {% if item.action == "create" %}
-                  <span class="tag" style="border-color: #2f855a; color: #2f855a;">{{ action_labels.get(item.action, item.action) }}</span>
+                  <span class="tag-compact" style="border-color: #2f855a; color: #2f855a;">{{ action_labels.get(item.action, item.action) }}</span>
                 {% elif item.action == "update" %}
-                  <span class="tag" style="border-color: #3182ce; color: #3182ce;">{{ action_labels.get(item.action, item.action) }}</span>
+                  <span class="tag-compact" style="border-color: #3182ce; color: #3182ce;">{{ action_labels.get(item.action, item.action) }}</span>
                 {% elif item.action == "delete" %}
-                  <span class="tag" style="border-color: #c53030; color: #c53030;">{{ action_labels.get(item.action, item.action) }}</span>
+                  <span class="tag-compact" style="border-color: #c53030; color: #c53030;">{{ action_labels.get(item.action, item.action) }}</span>
                 {% else %}
-                  <span class="tag" style="border-color: #718096; color: #718096;">{{ action_labels.get(item.action, item.action) }}</span>
+                  <span class="tag-compact" style="border-color: #718096; color: #718096;">{{ action_labels.get(item.action, item.action) }}</span>
                 {% endif %}
               </td>
               <td class="px-4 py-3 text-slate-600">{{ module_labels.get(item.module, item.module) }}</td>

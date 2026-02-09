@@ -70,6 +70,10 @@
     @apply inline-flex items-center rounded-full border border-slate-200 px-2.5 py-0.5 text-xs font-medium text-slate-600;
   }
 
+  .tag-compact {
+    @apply tag whitespace-nowrap px-2 py-0;
+  }
+
   .admin-shell {
     @apply relative flex min-h-screen bg-slate-100;
   }

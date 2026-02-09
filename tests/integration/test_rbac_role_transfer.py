@@ -253,3 +253,99 @@ async def test_imported_role_permissions_take_effect_on_access(initialized_db) -
             },
         )
         assert mutate.status_code == 403
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_role_import_returns_warning_trigger_when_partially_skipped(initialized_db) -> None:
+    """导入部分失败时应返回 warning toast 触发器，便于前端统一提示。"""
+
+    transport = httpx.ASGITransport(app=app)
+
+    await _seed_admin(
+        username="ops_importer3",
+        password="ops_importer_789",
+        role_slug="ops_importer3",
+        display_name="导入管理员三号",
+        permissions=[
+            _permission("rbac", "read"),
+            _permission("rbac", "update"),
+        ],
+    )
+
+    async with httpx.AsyncClient(transport=transport, base_url="http://testserver", follow_redirects=False) as client:
+        csrf_token = await _login_and_get_csrf(
+            client,
+            username="ops_importer3",
+            password="ops_importer_789",
+            next_path="/admin/rbac",
+        )
+
+        import_payload = {
+            "version": 1,
+            "roles": [
+                {
+                    "name": "非法角色",
+                    "slug": "Ops Team",
+                    "status": "enabled",
+                    "permissions": [
+                        {"resource": "admin_users", "action": "read", "status": "enabled"},
+                    ],
+                }
+            ],
+        }
+
+        response = await client.post(
+            "/admin/rbac/roles/import",
+            data={
+                "csrf_token": csrf_token,
+                "payload": json.dumps(import_payload, ensure_ascii=False),
+            },
+        )
+        assert response.status_code == 200
+
+        trigger_raw = response.headers.get("HX-Trigger", "")
+        assert trigger_raw
+        trigger = json.loads(trigger_raw)
+        assert trigger["rbac-close"] is True
+        assert trigger["rbac-toast"]["variant"] == "warning"
+        assert "部分跳过" in trigger["rbac-toast"]["title"]
+        assert "跳过 1" in trigger["rbac-toast"]["message"]
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_role_import_invalid_json_returns_422_form_errors(initialized_db) -> None:
+    """导入 JSON 语法错误时应返回 422 并展示表单错误。"""
+
+    transport = httpx.ASGITransport(app=app)
+
+    await _seed_admin(
+        username="ops_importer4",
+        password="ops_importer_abc",
+        role_slug="ops_importer4",
+        display_name="导入管理员四号",
+        permissions=[
+            _permission("rbac", "read"),
+            _permission("rbac", "update"),
+        ],
+    )
+
+    async with httpx.AsyncClient(transport=transport, base_url="http://testserver", follow_redirects=False) as client:
+        csrf_token = await _login_and_get_csrf(
+            client,
+            username="ops_importer4",
+            password="ops_importer_abc",
+            next_path="/admin/rbac",
+        )
+
+        response = await client.post(
+            "/admin/rbac/roles/import",
+            data={
+                "csrf_token": csrf_token,
+                "payload": "{not-json}",
+            },
+        )
+        assert response.status_code == 422
+        assert "导入 JSON 解析失败，请检查格式" in response.text
+        assert response.headers.get("HX-Trigger", "") == ""

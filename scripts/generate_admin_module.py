@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import ast
 import json
 import re
 from pathlib import Path
@@ -12,10 +13,13 @@ MODULE_PATTERN = re.compile(r"^[a-z][a-z0-9_]{1,31}$")
 ROOT = Path(__file__).resolve().parents[1]
 CONTROLLERS_DIR = ROOT / "app/apps/admin/controllers"
 SERVICES_DIR = ROOT / "app/services"
+MODELS_DIR = ROOT / "app/models"
 PAGES_DIR = ROOT / "app/apps/admin/templates/pages"
 PARTIALS_DIR = ROOT / "app/apps/admin/templates/partials"
 TESTS_DIR = ROOT / "tests/unit"
 REGISTRY_DIR = ROOT / "app/apps/admin/registry_generated"
+MODELS_INIT_FILE = ROOT / "app/models/__init__.py"
+DB_FILE = ROOT / "app/db.py"
 
 
 def parse_args() -> argparse.Namespace:
@@ -40,11 +44,18 @@ def ensure_module_name(module: str) -> str:
     return value
 
 
+def to_pascal_case(value: str) -> str:
+    """下划线命名转换为驼峰命名。"""
+
+    return "".join(part[:1].upper() + part[1:] for part in value.split("_") if part)
+
+
 def write_file(path: Path, content: str, *, force: bool, dry_run: bool) -> None:
     """写入文件，支持覆盖与 dry-run。"""
 
     if path.exists() and not force:
         raise FileExistsError(f"文件已存在：{path}")
+
     if dry_run:
         print(f"[dry-run] {path}")
         return
@@ -52,6 +63,91 @@ def write_file(path: Path, content: str, *, force: bool, dry_run: bool) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(content, encoding="utf-8")
     print(f"[ok] {path}")
+
+
+def _insert_model_import(models_init_text: str, module: str, class_name: str) -> str:
+    """向 app/models/__init__.py 注入模块导入。"""
+
+    import_line = f"from .{module} import {class_name}"
+    if import_line in models_init_text:
+        return models_init_text
+
+    if "\n__all__" in models_init_text:
+        return models_init_text.replace("\n__all__", f"\n{import_line}\n\n__all__", 1)
+
+    if not models_init_text.endswith("\n"):
+        models_init_text += "\n"
+    return models_init_text + import_line + "\n"
+
+
+def _update_model_exports(models_init_text: str, class_name: str) -> str:
+    """更新 app/models/__init__.py 的 __all__ 导出列表。"""
+
+    match = re.search(r"__all__\s*=\s*(\[[^\]]*\])", models_init_text, flags=re.DOTALL)
+    if not match:
+        if not models_init_text.endswith("\n"):
+            models_init_text += "\n"
+        return models_init_text + f"__all__ = [\"{class_name}\"]\n"
+
+    exports = list(ast.literal_eval(match.group(1)))
+    if class_name not in exports:
+        exports.append(class_name)
+
+    replacement = "__all__ = [" + ", ".join(f'\"{item}\"' for item in exports) + "]"
+    return models_init_text[: match.start()] + replacement + models_init_text[match.end() :]
+
+
+def wire_models_init(module: str, class_name: str, *, dry_run: bool) -> None:
+    """自动接入 app/models/__init__.py。"""
+
+    if dry_run:
+        print(f"[dry-run] update {MODELS_INIT_FILE}")
+        return
+
+    if not MODELS_INIT_FILE.exists():
+        raise FileNotFoundError(f"缺少文件：{MODELS_INIT_FILE}")
+
+    text = MODELS_INIT_FILE.read_text(encoding="utf-8")
+    text = _insert_model_import(text, module, class_name)
+    text = _update_model_exports(text, class_name)
+    MODELS_INIT_FILE.write_text(text, encoding="utf-8")
+    print(f"[ok] update {MODELS_INIT_FILE}")
+
+
+def wire_db_models(class_name: str, *, dry_run: bool) -> None:
+    """自动接入 app/db.py 的模型导入和 document_models 列表。"""
+
+    if dry_run:
+        print(f"[dry-run] update {DB_FILE}")
+        return
+
+    if not DB_FILE.exists():
+        raise FileNotFoundError(f"缺少文件：{DB_FILE}")
+
+    text = DB_FILE.read_text(encoding="utf-8")
+
+    import_match = re.search(r"from \.models import ([^\n]+)", text)
+    if not import_match:
+        raise RuntimeError("app/db.py 未找到 models 导入行")
+
+    imported = [item.strip() for item in import_match.group(1).split(",") if item.strip()]
+    if class_name not in imported:
+        imported.append(class_name)
+        new_import_line = "from .models import " + ", ".join(imported)
+        text = text[: import_match.start()] + new_import_line + text[import_match.end() :]
+
+    models_match = re.search(r"document_models=\[(.*?)\]", text, flags=re.DOTALL)
+    if not models_match:
+        raise RuntimeError("app/db.py 未找到 document_models 列表")
+
+    model_names = [item.strip() for item in models_match.group(1).split(",") if item.strip()]
+    if class_name not in model_names:
+        model_names.append(class_name)
+        replacement = "document_models=[" + ", ".join(model_names) + "]"
+        text = text[: models_match.start()] + replacement + text[models_match.end() :]
+
+    DB_FILE.write_text(text, encoding="utf-8")
+    print(f"[ok] update {DB_FILE}")
 
 
 def render_controller(module: str, title: str) -> str:
@@ -225,7 +321,46 @@ async def {module}_delete(request: Request, item_id: str) -> HTMLResponse:
 '''
 
 
-def render_service(module: str) -> str:
+def render_model(module: str, class_name: str) -> str:
+    """渲染模型模板。"""
+
+    return f'''"""{module} 模型（脚手架生成）。"""
+
+from __future__ import annotations
+
+from datetime import datetime, timezone
+from typing import Literal
+
+from beanie import Document
+from pymongo import IndexModel
+from pydantic import Field
+
+
+def utc_now() -> datetime:
+    """返回 UTC 当前时间。"""
+
+    return datetime.now(timezone.utc)
+
+
+class {class_name}(Document):
+    """{module} 数据模型。"""
+
+    name: str = Field(..., min_length=1, max_length=64)
+    description: str = Field(default="", max_length=200)
+    status: Literal["enabled", "disabled"] = "enabled"
+    created_at: datetime = Field(default_factory=utc_now)
+    updated_at: datetime = Field(default_factory=utc_now)
+
+    class Settings:
+        name = "{module}_items"
+        indexes = [
+            IndexModel([("name", 1)], name="idx_{module}_name"),
+            IndexModel([("updated_at", -1)], name="idx_{module}_updated_at"),
+        ]
+'''
+
+
+def render_service(module: str, class_name: str) -> str:
     """渲染服务模板。"""
 
     return f'''"""{module} 服务层（脚手架模板）。"""
@@ -234,37 +369,65 @@ from __future__ import annotations
 
 from typing import Any
 
+from beanie import PydanticObjectId
 
-async def list_items() -> list[dict[str, Any]]:
-    """查询列表（待业务实现）。"""
-
-    return []
+from app.models.{module} import {class_name}, utc_now
 
 
-async def get_item(item_id: str) -> dict[str, Any] | None:
-    """按 ID 查询单条记录（待业务实现）。"""
+async def list_items() -> list[{class_name}]:
+    """查询列表。"""
 
-    _ = item_id
-    return None
-
-
-async def create_item(payload: dict[str, Any]) -> dict[str, Any]:
-    """创建记录（待业务实现）。"""
-
-    return payload
+    return await {class_name}.find_all().sort("-updated_at").to_list()
 
 
-async def update_item(item: dict[str, Any], payload: dict[str, Any]) -> dict[str, Any]:
-    """更新记录（待业务实现）。"""
+async def get_item(item_id: str) -> {class_name} | None:
+    """按 ID 查询单条记录。"""
 
-    item.update(payload)
+    try:
+        object_id = PydanticObjectId(item_id)
+    except Exception:
+        return None
+    return await {class_name}.get(object_id)
+
+
+async def create_item(payload: dict[str, Any]) -> {class_name}:
+    """创建记录（默认字段，业务可按需扩展）。"""
+
+    status = str(payload.get("status") or "enabled").strip().lower()
+    if status not in {{"enabled", "disabled"}}:
+        status = "enabled"
+
+    item = {class_name}(
+        name=str(payload.get("name") or "").strip()[:64],
+        description=str(payload.get("description") or "").strip()[:200],
+        status=status,
+        created_at=utc_now(),
+        updated_at=utc_now(),
+    )
+    await item.insert()
     return item
 
 
-async def delete_item(item: dict[str, Any]) -> None:
-    """删除记录（待业务实现）。"""
+async def update_item(item: {class_name}, payload: dict[str, Any]) -> {class_name}:
+    """更新记录（默认字段，业务可按需扩展）。"""
 
-    _ = item
+    item.name = str(payload.get("name") or item.name).strip()[:64]
+    item.description = str(payload.get("description") or item.description).strip()[:200]
+
+    status = str(payload.get("status") or item.status).strip().lower()
+    if status not in {{"enabled", "disabled"}}:
+        status = item.status
+    item.status = status
+
+    item.updated_at = utc_now()
+    await item.save()
+    return item
+
+
+async def delete_item(item: {class_name}) -> None:
+    """删除记录。"""
+
+    await item.delete()
 '''
 
 
@@ -402,6 +565,19 @@ def render_form_partial(module: str, title: str) -> str:
       <input name="name" class="input" value="{{{{ form.name if form.name is defined else '' }}}}" />
     </div>
 
+    <div>
+      <label class="label">描述</label>
+      <input name="description" class="input" value="{{{{ form.description if form.description is defined else '' }}}}" />
+    </div>
+
+    <div>
+      <label class="label">状态</label>
+      <select name="status" class="input">
+        <option value="enabled" {{% if form.status is not defined or form.status == "enabled" %}}selected{{% endif %}}>启用</option>
+        <option value="disabled" {{% if form.status is defined and form.status == "disabled" %}}selected{{% endif %}}>禁用</option>
+      </select>
+    </div>
+
     <div class="flex flex-wrap items-center justify-end gap-3 pt-2">
       <button type="button" class="btn-ghost" x-on:click="modalOpen = false">取消</button>
       <button type="submit" class="btn-primary">保存</button>
@@ -420,6 +596,13 @@ import json
 from pathlib import Path
 
 import pytest
+
+
+@pytest.mark.unit
+def test_{module}_scaffold_files_exist() -> None:
+    assert Path("app/models/{module}.py").exists()
+    assert Path("app/services/{module}_service.py").exists()
+    assert Path("app/apps/admin/controllers/{module}.py").exists()
 
 
 @pytest.mark.unit
@@ -451,13 +634,16 @@ def main() -> None:
 
     args = parse_args()
     module = ensure_module_name(args.module)
+    class_name = f"{to_pascal_case(module)}Item"
+
     title = (args.name or module).strip()
     group = (args.group or "system").strip() or "system"
     url = (args.url or f"/admin/{module}").strip() or f"/admin/{module}"
 
     files = {
         CONTROLLERS_DIR / f"{module}.py": render_controller(module, title),
-        SERVICES_DIR / f"{module}_service.py": render_service(module),
+        SERVICES_DIR / f"{module}_service.py": render_service(module, class_name),
+        MODELS_DIR / f"{module}.py": render_model(module, class_name),
         PAGES_DIR / f"{module}.html": render_page(module, title),
         PARTIALS_DIR / f"{module}_table.html": render_table(module, title),
         PARTIALS_DIR / f"{module}_form.html": render_form_partial(module, title),
@@ -468,6 +654,10 @@ def main() -> None:
     for path, content in files.items():
         write_file(path, content, force=args.force, dry_run=args.dry_run)
 
+    wire_models_init(module, class_name, dry_run=args.dry_run)
+    wire_db_models(class_name, dry_run=args.dry_run)
+
+    print("完成：模型已接入 app/models/__init__.py 与 app/db.py。")
     print("完成：请手动在 app/main.py 引入并 include_router 新控制器。")
 
 

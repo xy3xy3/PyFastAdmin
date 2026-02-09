@@ -118,33 +118,73 @@ docker compose --env-file ../../.env up -d --build
 
 ## 二开与迁移
 
-### 1) 模块脚手架命令
+本章节面向业务开发者，重点讲“怎么从示例项目快速落地自己的模块”。
+
+### 1) 一键生成模块骨架（推荐起手）
 
 ```bash
+# 先预览将生成哪些文件
+uv run python scripts/generate_admin_module.py inventory --name "库存管理" --group system --dry-run
+
+# 确认后生成
 uv run python scripts/generate_admin_module.py inventory --name "库存管理" --group system
 ```
 
-脚手架会一次性生成以下文件：
+可选参数：
+- `module`：模块标识，必须匹配 `^[a-z][a-z0-9_]{1,31}$`
+- `--name`：模块中文名（默认同 module）
+- `--group`：菜单分组 key（默认 `system`）
+- `--url`：资源 URL（默认 `/admin/<module>`）
+- `--force`：覆盖已有文件
+- `--dry-run`：仅打印不落盘
+
+### 2) 脚手架会生成什么
 - `app/apps/admin/controllers/<module>.py`
+- `app/models/<module>.py`
 - `app/services/<module>_service.py`
 - `app/apps/admin/templates/pages/<module>.html`
 - `app/apps/admin/templates/partials/<module>_table.html`
 - `app/apps/admin/templates/partials/<module>_form.html`
 - `tests/unit/test_<module>_scaffold.py`
 - `app/apps/admin/registry_generated/<module>.json`
+- 自动更新 `app/models/__init__.py` 与 `app/db.py`，完成模型注册
 
-> 生成后请手动在 `app/main.py` 引入并 `app.include_router(...)` 新控制器。
+### 3) 生成后你还需要手动做什么（必须）
+1. 在 `app/main.py` 引入并注册新控制器路由（`app.include_router(...)`）。
+2. 按业务调整模型字段/索引和服务层读写逻辑（脚手架提供的是通用 CRUD 起点）。
+3. 按业务补齐表单字段、筛选、分页和错误提示。
+4. 保持按钮权限与后端权限一致（只隐藏按钮不算完成）。
+5. 补充操作日志（至少 create/read/update/delete）。
+6. 做移动端和桌面端检查（尤其表格横向滚动）。
 
-### 2) 角色权限导入导出（JSON）
+### 4) RBAC 显式权限声明（强烈建议）
+- 推荐在路由上使用：
+  - `@permission_decorator.permission_meta("resource", "action")`
+- 自动推断仍可用，但只作为兜底。
+- 批量操作、导入导出、非标准路径务必显式声明，降低误判风险。
+
+### 5) 角色权限导入导出（JSON）
 - 页面入口：`/admin/rbac` 顶部按钮（导出 JSON / 导入 JSON）
 - 导出接口：`GET /admin/rbac/roles/export?include_system=1`
 - 导入接口：`POST /admin/rbac/roles/import`
 
-用途：可以将示例项目的角色/权限配置迁移到业务项目，减少手工重建成本。
+典型迁移流程：
+1. 在示例环境导出角色权限 JSON。
+2. 在业务环境进入 RBAC 页面导入 JSON。
+3. 检查导入 summary（新增/更新/跳过）与操作日志。
+4. 用导入后的角色账号实际登录验证菜单和按钮权限。
 
-### 3) 显式权限声明
-- 推荐在路由上使用 `@permission_decorator.permission_meta(resource, action)`。
-- 自动推断仍保留，但只做兜底；复杂路由请显式声明，避免误判。
+### 6) 推荐验收命令
 
-### 4) 二开 8 步落地清单
-- 见 `docs/SECONDARY_DEVELOPMENT_GUIDE.md`。
+```bash
+# 基础回归
+uv run pytest -m unit
+uv run python -m compileall app tests scripts
+
+# 若改了导入导出/权限映射，建议追加
+uv run pytest tests/integration/test_rbac_role_transfer.py -m integration
+```
+
+### 7) 更多二开细则
+- AI 协作规范：`AGENTS.md`
+- 8 步落地清单：`docs/SECONDARY_DEVELOPMENT_GUIDE.md`

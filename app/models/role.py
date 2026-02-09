@@ -9,7 +9,9 @@ from beanie import Document
 from pymongo import IndexModel
 from pydantic import BaseModel, Field
 
-ROLE_SLUG_PATTERN = r"^[a-z][a-z0-9_]{1,31}$"
+from app.services import validators
+
+ROLE_SLUG_PATTERN = validators.ROLE_SLUG_PATTERN.pattern
 
 
 def utc_now() -> datetime:

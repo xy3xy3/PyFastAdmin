@@ -10,7 +10,7 @@ from fastapi import APIRouter, Form, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 
-from app.services import admin_user_service, auth_service, csrf_service, log_service
+from app.services import admin_user_service, auth_service, csrf_service, log_service, permission_decorator, validators
 
 BASE_DIR = Path(__file__).resolve().parents[1]
 TEMPLATES_DIR = BASE_DIR / "templates"
@@ -123,6 +123,7 @@ async def profile_page(request: Request) -> HTMLResponse:
     context = {
         **base_context(request),
         "admin": admin,
+        "error": "",
         "saved": False,
     }
     await log_service.record_request(
@@ -136,11 +137,8 @@ async def profile_page(request: Request) -> HTMLResponse:
     return templates.TemplateResponse("pages/profile.html", context)
 
 
-@router.post(
-    "/profile",
-    response_class=HTMLResponse,
-    openapi_extra={"permission": {"resource": "profile", "action": "update"}},
-)
+@router.post("/profile", response_class=HTMLResponse)
+@permission_decorator.permission_meta("profile", "update")
 async def profile_update(
     request: Request,
     display_name: str = Form(""),
@@ -151,12 +149,32 @@ async def profile_update(
     if not admin:
         return RedirectResponse(url="/admin/login", status_code=302)
 
+    normalized_email = validators.normalize_email(email)
+    email_error = validators.validate_optional_email(normalized_email)
+    display_name_value = display_name.strip() or admin.display_name
+    if email_error:
+        await log_service.record_request(
+            request,
+            action="update",
+            module="auth",
+            target="个人资料",
+            target_id=str(admin.id),
+            detail=f"更新个人资料失败：{email_error}",
+        )
+        context = {
+            **base_context(request),
+            "admin": admin,
+            "error": email_error,
+            "saved": False,
+        }
+        return templates.TemplateResponse("pages/profile.html", context, status_code=422)
+
     payload = {
-        "display_name": display_name.strip() or admin.display_name,
-        "email": email.strip(),
+        "display_name": display_name_value,
+        "email": normalized_email,
     }
     await admin_user_service.update_admin(admin, payload)
-    request.session["admin_name"] = admin.display_name
+    request.session["admin_name"] = display_name_value
     await log_service.record_request(
         request,
         action="update",
@@ -169,6 +187,7 @@ async def profile_update(
     context = {
         **base_context(request),
         "admin": admin,
+        "error": "",
         "saved": True,
     }
     return templates.TemplateResponse("pages/profile.html", context)
@@ -197,11 +216,8 @@ async def password_page(request: Request) -> HTMLResponse:
     return templates.TemplateResponse("pages/password.html", context)
 
 
-@router.post(
-    "/password",
-    response_class=HTMLResponse,
-    openapi_extra={"permission": {"resource": "password", "action": "update"}},
-)
+@router.post("/password", response_class=HTMLResponse)
+@permission_decorator.permission_meta("password", "update")
 async def password_update(
     request: Request,
     old_password: str = Form(""),

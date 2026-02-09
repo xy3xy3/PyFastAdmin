@@ -2,9 +2,15 @@
 
 from __future__ import annotations
 
-from typing import Iterable
+import copy
+import json
+from pathlib import Path
+from typing import Any, Iterable
 
-ADMIN_TREE = [
+VALID_ACTIONS = {"create", "read", "update", "delete"}
+REGISTRY_GENERATED_DIR = Path(__file__).resolve().parent / "registry_generated"
+
+BASE_ADMIN_TREE = [
     {
         "key": "dashboard",
         "name": "首页",
@@ -68,14 +74,101 @@ ADMIN_TREE = [
                 "name": "操作日志",
                 "url": "/admin/logs",
                 "actions": ["read"],
-            }
+            },
         ],
     },
 ]
 
 
+def _normalize_generated_node(payload: dict[str, Any]) -> dict[str, Any] | None:
+    """清洗外部注册节点，避免脏数据污染权限树。"""
+
+    group_key = str(payload.get("group_key") or "").strip()
+    node = payload.get("node")
+    if not group_key or not isinstance(node, dict):
+        return None
+
+    key = str(node.get("key") or "").strip()
+    name = str(node.get("name") or "").strip()
+    url = str(node.get("url") or "").strip()
+    actions = [
+        str(action).strip().lower()
+        for action in node.get("actions", [])
+        if str(action).strip().lower() in VALID_ACTIONS
+    ]
+
+    if not key or not name or not url or not actions:
+        return None
+
+    normalized = {
+        "group_key": group_key,
+        "node": {
+            "key": key,
+            "name": name,
+            "url": url,
+            "actions": list(dict.fromkeys(actions)),
+        },
+    }
+    return normalized
+
+
+def _load_generated_nodes() -> list[dict[str, Any]]:
+    """加载脚手架生成的注册节点（JSON）。"""
+
+    if not REGISTRY_GENERATED_DIR.exists():
+        return []
+
+    nodes: list[dict[str, Any]] = []
+    for path in sorted(REGISTRY_GENERATED_DIR.glob("*.json")):
+        try:
+            payload = json.loads(path.read_text(encoding="utf-8"))
+        except Exception:
+            continue
+        if not isinstance(payload, dict):
+            continue
+
+        normalized = _normalize_generated_node(payload)
+        if normalized is not None:
+            nodes.append(normalized)
+    return nodes
+
+
+def build_admin_tree() -> list[dict[str, Any]]:
+    """构建最终权限树：基础树 + 脚手架扩展。"""
+
+    tree = copy.deepcopy(BASE_ADMIN_TREE)
+    group_map = {
+        str(group.get("key") or ""): group
+        for group in tree
+    }
+
+    for item in _load_generated_nodes():
+        group_key = item["group_key"]
+        group = group_map.get(group_key)
+        if not group:
+            group = {"key": group_key, "name": group_key, "children": []}
+            tree.append(group)
+            group_map[group_key] = group
+
+        children = group.setdefault("children", [])
+        existing_index = next(
+            (index for index, child in enumerate(children) if child.get("key") == item["node"]["key"]),
+            None,
+        )
+        if existing_index is None:
+            children.append(item["node"])
+        else:
+            children[existing_index] = item["node"]
+
+    return tree
+
+
+ADMIN_TREE = build_admin_tree()
+
+
 def iter_leaf_nodes(tree: list[dict]) -> Iterable[dict]:
     """遍历叶子节点。"""
+
     for node in tree:
         children = node.get("children")
         if children:

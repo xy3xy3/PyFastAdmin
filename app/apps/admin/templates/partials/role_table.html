@@ -7,7 +7,7 @@
       <p class="mt-1 text-sm text-slate-500">共 {{ pagination.total }} 条记录</p>
     </div>
 
-    <div class="flex items-center gap-2">
+    <div class="flex flex-wrap items-center gap-2">
       <button
         class="btn-ghost"
         hx-get="/admin/rbac/roles/table"
@@ -18,6 +18,22 @@
       >
         刷新
       </button>
+      {% if rbac_perm['read'] %}
+        <a class="btn-ghost" href="/admin/rbac/roles/export?include_system=1">导出 JSON</a>
+      {% endif %}
+      {% if rbac_perm['update'] %}
+        <button
+          class="btn-ghost"
+          hx-get="/admin/rbac/roles/import"
+          hx-target="#modal-body"
+          hx-swap="innerHTML"
+          hx-indicator="#global-indicator"
+          hx-vals='{{ {"search_q": filters.search_q, "search_status": filters.search_status, "search_sort": filters.search_sort, "page": pagination.page}|tojson }}'
+          x-on:click="modalOpen = true"
+        >
+          导入 JSON
+        </button>
+      {% endif %}
       {% if rbac_perm['create'] %}
         <button
           class="btn-primary"

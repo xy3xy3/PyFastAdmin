@@ -115,3 +115,36 @@ docker compose --env-file ../../.env up -d --build
 ## 依赖管理（uv）
 - 新增依赖：`uv add 包名`
 - 同步依赖：`uv sync`
+
+## 二开与迁移
+
+### 1) 模块脚手架命令
+
+```bash
+uv run python scripts/generate_admin_module.py inventory --name "库存管理" --group system
+```
+
+脚手架会一次性生成以下文件：
+- `app/apps/admin/controllers/<module>.py`
+- `app/services/<module>_service.py`
+- `app/apps/admin/templates/pages/<module>.html`
+- `app/apps/admin/templates/partials/<module>_table.html`
+- `app/apps/admin/templates/partials/<module>_form.html`
+- `tests/unit/test_<module>_scaffold.py`
+- `app/apps/admin/registry_generated/<module>.json`
+
+> 生成后请手动在 `app/main.py` 引入并 `app.include_router(...)` 新控制器。
+
+### 2) 角色权限导入导出（JSON）
+- 页面入口：`/admin/rbac` 顶部按钮（导出 JSON / 导入 JSON）
+- 导出接口：`GET /admin/rbac/roles/export?include_system=1`
+- 导入接口：`POST /admin/rbac/roles/import`
+
+用途：可以将示例项目的角色/权限配置迁移到业务项目，减少手工重建成本。
+
+### 3) 显式权限声明
+- 推荐在路由上使用 `@permission_decorator.permission_meta(resource, action)`。
+- 自动推断仍保留，但只做兜底；复杂路由请显式声明，避免误判。
+
+### 4) 二开 8 步落地清单
+- 见 `docs/SECONDARY_DEVELOPMENT_GUIDE.md`。

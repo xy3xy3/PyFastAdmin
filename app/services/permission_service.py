@@ -233,23 +233,28 @@ def _infer_action(resource: str, method: str, path: str) -> str | None:
 
 
 def _resolve_explicit_permission(route: APIRoute, method: str) -> tuple[str, str] | None:
-    """从路由声明中读取显式权限映射，优先于自动推断。"""
+    """从显式声明读取权限映射，优先于自动推断。"""
 
-    meta = (route.openapi_extra or {}).get("permission")
-    if not isinstance(meta, dict):
-        return None
+    endpoint_meta = getattr(route.endpoint, "__permission_meta__", None)
+    openapi_meta = (route.openapi_extra or {}).get("permission")
 
-    scoped = meta.get(method.upper(), meta)
-    if not isinstance(scoped, dict):
-        return None
+    for meta in [endpoint_meta, openapi_meta]:
+        if not isinstance(meta, dict):
+            continue
 
-    resource = str(scoped.get("resource") or "").strip()
-    action = str(scoped.get("action") or "").strip()
-    if not resource or not action:
-        return None
-    if action not in _RESOURCE_ACTIONS.get(resource, set()):
-        return None
-    return (resource, action)
+        scoped = meta.get(method.upper(), meta)
+        if not isinstance(scoped, dict):
+            continue
+
+        resource = str(scoped.get("resource") or "").strip()
+        action = str(scoped.get("action") or "").strip()
+        if not resource or not action:
+            continue
+        if action not in _RESOURCE_ACTIONS.get(resource, set()):
+            continue
+        return (resource, action)
+
+    return None
 
 
 @lru_cache(maxsize=1)

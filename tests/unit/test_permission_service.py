@@ -186,3 +186,5 @@ def test_required_permission_prefers_explicit_route_declaration() -> None:
         "update",
     )
     assert permission_service.required_permission("/admin/config", "POST") == ("config", "update")
+    assert permission_service.required_permission("/admin/rbac/roles/import", "GET") == ("rbac", "update")
+    assert permission_service.required_permission("/admin/rbac/roles/import", "POST") == ("rbac", "update")

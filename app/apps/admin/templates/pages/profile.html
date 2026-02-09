@@ -15,6 +15,12 @@
       </div>
     {% endif %}
 
+    {% if error %}
+      <div class="mt-4 rounded-md border border-red-100 bg-red-50 px-3 py-2 text-sm text-red-600">
+        {{ error }}
+      </div>
+    {% endif %}
+
     {% if not profile_perm['update'] %}
       <div class="mt-4 rounded-md border border-amber-100 bg-amber-50 px-3 py-2 text-sm text-amber-700">
         当前角色仅有查看权限，不能修改个人资料。

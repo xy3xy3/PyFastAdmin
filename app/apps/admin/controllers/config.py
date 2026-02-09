@@ -9,7 +9,7 @@ from fastapi import APIRouter, Form, Request
 from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
 
-from app.services import config_service, log_service
+from app.services import config_service, log_service, permission_decorator
 
 BASE_DIR = Path(__file__).resolve().parents[1]
 TEMPLATES_DIR = BASE_DIR / "templates"
@@ -46,11 +46,8 @@ async def config_page(request: Request) -> HTMLResponse:
     return templates.TemplateResponse("pages/config.html", context)
 
 
-@router.post(
-    "/config",
-    response_class=HTMLResponse,
-    openapi_extra={"permission": {"resource": "config", "action": "update"}},
-)
+@router.post("/config", response_class=HTMLResponse)
+@permission_decorator.permission_meta("config", "update")
 async def config_save(
     request: Request,
     smtp_host: str = Form(""),

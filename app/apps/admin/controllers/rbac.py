@@ -3,18 +3,16 @@
 from __future__ import annotations
 
 import json
-import re
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Mapping
 
 from fastapi import APIRouter, HTTPException, Request
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 
 from app.apps.admin.registry import ADMIN_TREE, iter_leaf_nodes
-from app.models.role import ROLE_SLUG_PATTERN
-from app.services import admin_user_service, log_service, role_service
+from app.services import admin_user_service, log_service, permission_decorator, role_service, validators
 
 BASE_DIR = Path(__file__).resolve().parents[1]
 TEMPLATES_DIR = BASE_DIR / "templates"
@@ -24,6 +22,8 @@ router = APIRouter(prefix="/admin")
 
 
 def fmt_dt(value: datetime | None) -> str:
+    """格式化日期，统一在页面展示短时间文本。"""
+
     if not value:
         return ""
     if value.tzinfo is None:
@@ -55,6 +55,8 @@ ACTION_LABELS = {
 
 
 def base_context(request: Request) -> dict[str, Any]:
+    """构建模板基础上下文。"""
+
     return {
         "request": request,
         "current_admin": request.session.get("admin_name"),
@@ -62,6 +64,8 @@ def base_context(request: Request) -> dict[str, Any]:
 
 
 def build_role_form(values: dict[str, Any]) -> dict[str, Any]:
+    """构建角色表单默认值。"""
+
     return {
         "name": values.get("name", ""),
         "slug": values.get("slug", ""),
@@ -70,7 +74,20 @@ def build_role_form(values: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def build_import_form(values: dict[str, Any]) -> dict[str, Any]:
+    """构建角色导入表单默认值。"""
+
+    allow_system_raw = str(values.get("allow_system", "")).strip().lower()
+    allow_system = allow_system_raw in {"1", "true", "on", "yes"}
+    return {
+        "payload": values.get("payload", ""),
+        "allow_system": allow_system,
+    }
+
+
 def parse_positive_int(value: Any, default: int = 1) -> int:
+    """安全解析正整数参数。"""
+
     try:
         parsed = int(str(value))
     except (TypeError, ValueError):
@@ -79,6 +96,8 @@ def parse_positive_int(value: Any, default: int = 1) -> int:
 
 
 def parse_role_filters(values: Mapping[str, Any]) -> tuple[dict[str, str], int]:
+    """解析角色列表筛选条件。"""
+
     search_q = str(values.get("search_q") or values.get("q") or "").strip()
     search_status = str(values.get("search_status") or "").strip()
     if search_status not in STATUS_META:
@@ -100,6 +119,8 @@ def parse_role_filters(values: Mapping[str, Any]) -> tuple[dict[str, str], int]:
 
 
 def build_pagination(total: int, page: int, page_size: int) -> dict[str, Any]:
+    """构建分页结构，供模板渲染页码。"""
+
     total_pages = max((total + page_size - 1) // page_size, 1)
     current = min(max(page, 1), total_pages)
     start_page = max(current - 2, 1)
@@ -129,6 +150,8 @@ def build_pagination(total: int, page: int, page_size: int) -> dict[str, Any]:
 
 
 def filter_roles(roles: list[Any], filters: dict[str, str]) -> list[Any]:
+    """按关键词、状态、排序筛选角色列表。"""
+
     filtered = roles
     if filters["search_q"]:
         keyword = filters["search_q"].lower()
@@ -153,6 +176,8 @@ def filter_roles(roles: list[Any], filters: dict[str, str]) -> list[Any]:
 
 
 async def read_request_values(request: Request) -> dict[str, str]:
+    """统一读取 Query + Form 参数，兼容 HTMX 请求。"""
+
     values: dict[str, str] = {key: value for key, value in request.query_params.items()}
     if request.method == "GET":
         return values
@@ -173,6 +198,8 @@ async def build_role_table_context(
     filters: dict[str, str],
     page: int,
 ) -> dict[str, Any]:
+    """构建角色表格上下文。"""
+
     roles = await role_service.list_roles()
     filtered_roles = filter_roles(roles, filters)
     pagination = build_pagination(len(filtered_roles), page, ROLE_PAGE_SIZE)
@@ -187,7 +214,10 @@ async def build_role_table_context(
         "pagination": pagination,
     }
 
-def build_checked_map(form_data) -> dict[str, set[str]]:
+
+def build_checked_map(form_data: Any) -> dict[str, set[str]]:
+    """从表单解析权限勾选状态。"""
+
     checked_map: dict[str, set[str]] = {}
     for node in iter_leaf_nodes(ADMIN_TREE):
         actions = form_data.getlist(f"perm_{node['key']}")
@@ -196,7 +226,7 @@ def build_checked_map(form_data) -> dict[str, set[str]]:
     return checked_map
 
 
-def build_permissions(form_data, owner: str) -> list[dict[str, Any]]:
+def build_permissions(form_data: Any, owner: str) -> list[dict[str, Any]]:
     """将表单勾选项转换为权限列表，并统一补齐 read 依赖。"""
 
     permissions: list[dict[str, Any]] = []
@@ -227,6 +257,8 @@ def build_permissions(form_data, owner: str) -> list[dict[str, Any]]:
 
 
 def build_checked_map_from_permissions(permissions: list[Any]) -> dict[str, set[str]]:
+    """将角色权限列表转换为模板可用的勾选映射。"""
+
     checked_map: dict[str, set[str]] = {}
     for item in permissions:
         resource = getattr(item, "resource", None) or item.get("resource")
@@ -243,21 +275,45 @@ def role_errors(values: dict[str, Any]) -> list[str]:
     errors: list[str] = []
     if len(values.get("name", "")) < 2:
         errors.append("角色名称至少 2 个字符")
-    slug = str(values.get("slug", ""))
-    if not re.fullmatch(ROLE_SLUG_PATTERN, slug):
-        errors.append("角色标识仅支持小写字母、数字、下划线，且必须以字母开头")
+
+    slug_error = validators.validate_role_slug(str(values.get("slug", "")))
+    if slug_error:
+        errors.append(slug_error)
+
     if values.get("status") not in STATUS_META:
         errors.append("状态不合法")
     return errors
 
 
+def build_import_errors(payload: str) -> list[str]:
+    """校验导入表单基础字段。"""
+
+    errors: list[str] = []
+    if not payload.strip():
+        errors.append("请粘贴角色导入 JSON")
+    return errors
+
+
+def build_import_summary_message(summary: dict[str, Any]) -> str:
+    """构建导入结果描述，便于 toast 与日志复用。"""
+
+    return (
+        f"总计 {summary['total']}，新增 {summary['created']}，"
+        f"更新 {summary['updated']}，跳过 {summary['skipped']}"
+    )
+
+
 @router.get("/", response_class=HTMLResponse)
 async def admin_root() -> RedirectResponse:
+    """后台首页重定向到仪表盘。"""
+
     return RedirectResponse(url="/admin/dashboard", status_code=302)
 
 
 @router.get("/dashboard", response_class=HTMLResponse)
 async def dashboard_page(request: Request) -> HTMLResponse:
+    """仪表盘页面。"""
+
     roles = await role_service.list_roles()
     admins = await admin_user_service.list_admins()
     dashboard = {
@@ -279,6 +335,8 @@ async def dashboard_page(request: Request) -> HTMLResponse:
 
 @router.get("/rbac", response_class=HTMLResponse)
 async def rbac_page(request: Request) -> HTMLResponse:
+    """RBAC 页面。"""
+
     filters, page = parse_role_filters(request.query_params)
     context = await build_role_table_context(request, filters, page)
     context["action_labels"] = ACTION_LABELS
@@ -295,13 +353,133 @@ async def rbac_page(request: Request) -> HTMLResponse:
 
 @router.get("/rbac/roles/table", response_class=HTMLResponse)
 async def role_table(request: Request) -> HTMLResponse:
+    """角色表格 partial。"""
+
     filters, page = parse_role_filters(request.query_params)
     context = await build_role_table_context(request, filters, page)
     return templates.TemplateResponse("partials/role_table.html", context)
 
 
+@router.get("/rbac/roles/export")
+@permission_decorator.permission_meta("rbac", "read")
+async def role_export(request: Request, include_system: str = "1") -> JSONResponse:
+    """导出角色权限 JSON，便于跨项目迁移。"""
+
+    include_system_value = include_system.strip().lower() in {"1", "true", "yes", "on"}
+    payload = await role_service.export_roles_payload(include_system=include_system_value)
+    filename = f"roles-export-{datetime.now().strftime('%Y%m%d%H%M%S')}.json"
+    await log_service.record_request(
+        request,
+        action="read",
+        module="rbac",
+        target="角色与权限",
+        detail=f"导出角色权限配置（含系统角色：{'是' if include_system_value else '否'}）",
+    )
+    return JSONResponse(
+        content=payload,
+        headers={
+            "Content-Disposition": f'attachment; filename="{filename}"',
+        },
+    )
+
+
+@router.get("/rbac/roles/import", response_class=HTMLResponse)
+@permission_decorator.permission_meta("rbac", "update")
+async def role_import_form(request: Request) -> HTMLResponse:
+    """加载角色导入弹窗。"""
+
+    filters, page = parse_role_filters(request.query_params)
+    context = {
+        **base_context(request),
+        "form": build_import_form({}),
+        "errors": [],
+        "filters": filters,
+        "page": page,
+    }
+    return templates.TemplateResponse("partials/role_import_form.html", context)
+
+
+@router.post("/rbac/roles/import", response_class=HTMLResponse)
+@permission_decorator.permission_meta("rbac", "update")
+async def role_import(request: Request) -> HTMLResponse:
+    """导入角色权限 JSON。"""
+
+    request_values = await read_request_values(request)
+    filters, page = parse_role_filters(request_values)
+    form_data = await request.form()
+    form = build_import_form(
+        {
+            "payload": str(form_data.get("payload", "")),
+            "allow_system": str(form_data.get("allow_system", "")),
+        }
+    )
+
+    errors = build_import_errors(form["payload"])
+    parsed_payload: dict[str, Any] = {}
+    if not errors:
+        try:
+            raw_payload = json.loads(form["payload"])
+            if isinstance(raw_payload, dict):
+                parsed_payload = raw_payload
+            else:
+                errors.append("导入 JSON 顶层必须是对象")
+        except json.JSONDecodeError:
+            errors.append("导入 JSON 解析失败，请检查格式")
+
+    if errors:
+        context = {
+            **base_context(request),
+            "form": form,
+            "errors": errors,
+            "filters": filters,
+            "page": page,
+        }
+        return templates.TemplateResponse("partials/role_import_form.html", context, status_code=422)
+
+    owner = request.session.get("admin_name") or "system"
+    summary = await role_service.import_roles_payload(
+        parsed_payload,
+        owner=owner,
+        allow_system=form["allow_system"],
+    )
+    summary_message = build_import_summary_message(summary)
+
+    await log_service.record_request(
+        request,
+        action="update",
+        module="rbac",
+        target="角色与权限",
+        detail=f"导入角色权限配置：{summary_message}",
+    )
+
+    context = await build_role_table_context(request, filters, page)
+    response = templates.TemplateResponse("partials/role_table.html", context)
+    has_errors = bool(summary["errors"])
+    message = summary_message
+    if has_errors:
+        # 仅展示前 2 条错误，避免 toast 过长影响可读性。
+        brief_errors = "；".join(summary["errors"][:2])
+        if brief_errors:
+            message = f"{summary_message}。{brief_errors}"
+
+    response.headers["HX-Trigger"] = json.dumps(
+        {
+            "rbac-toast": {
+                "title": "导入完成" if not has_errors else "导入完成（部分跳过）",
+                "message": message,
+                "variant": "success" if not has_errors else "warning",
+            },
+            "rbac-close": True,
+        },
+        ensure_ascii=True,
+    )
+    return response
+
+
 @router.get("/rbac/roles/new", response_class=HTMLResponse)
 async def role_new(request: Request) -> HTMLResponse:
+    """新建角色弹窗。"""
+
     form = build_role_form({})
     filters, page = parse_role_filters(request.query_params)
     context = {
@@ -322,6 +500,8 @@ async def role_new(request: Request) -> HTMLResponse:
 
 @router.get("/rbac/roles/{slug}/edit", response_class=HTMLResponse)
 async def role_edit(request: Request, slug: str) -> HTMLResponse:
+    """编辑角色弹窗。"""
+
     role = await role_service.get_role_by_slug(slug)
     if not role:
         raise HTTPException(status_code=404, detail="角色不存在")
@@ -352,21 +532,20 @@ async def role_edit(request: Request, slug: str) -> HTMLResponse:
     return templates.TemplateResponse("partials/role_form.html", context)
 
 
-@router.post(
-    "/rbac/roles",
-    response_class=HTMLResponse,
-    openapi_extra={"permission": {"resource": "rbac", "action": "create"}},
-)
+@router.post("/rbac/roles", response_class=HTMLResponse)
+@permission_decorator.permission_meta("rbac", "create")
 async def role_create(
     request: Request,
 ) -> HTMLResponse:
+    """创建角色。"""
+
     request_values = await read_request_values(request)
     filters, page = parse_role_filters(request_values)
     form_data = await request.form()
     form = build_role_form(
         {
             "name": str(form_data.get("name", "")).strip(),
-            "slug": str(form_data.get("slug", "")).strip().lower(),
+            "slug": validators.normalize_role_slug(str(form_data.get("slug", ""))),
             "status": str(form_data.get("status", "enabled")),
             "description": str(form_data.get("description", "")).strip(),
         }
@@ -413,15 +592,14 @@ async def role_create(
     return response
 
 
-@router.post(
-    "/rbac/roles/{slug}",
-    response_class=HTMLResponse,
-    openapi_extra={"permission": {"resource": "rbac", "action": "update"}},
-)
+@router.post("/rbac/roles/{slug}", response_class=HTMLResponse)
+@permission_decorator.permission_meta("rbac", "update")
 async def role_update(
     request: Request,
     slug: str,
 ) -> HTMLResponse:
+    """更新角色。"""
+
     request_values = await read_request_values(request)
     filters, page = parse_role_filters(request_values)
     role = await role_service.get_role_by_slug(slug)
@@ -477,12 +655,11 @@ async def role_update(
     return response
 
 
-@router.delete(
-    "/rbac/roles/{slug}",
-    response_class=HTMLResponse,
-    openapi_extra={"permission": {"resource": "rbac", "action": "delete"}},
-)
+@router.delete("/rbac/roles/{slug}", response_class=HTMLResponse)
+@permission_decorator.permission_meta("rbac", "delete")
 async def role_delete(request: Request, slug: str) -> HTMLResponse:
+    """删除角色。"""
+
     request_values = await read_request_values(request)
     filters, page = parse_role_filters(request_values)
     role = await role_service.get_role_by_slug(slug)

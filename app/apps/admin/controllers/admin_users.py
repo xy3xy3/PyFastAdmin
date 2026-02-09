@@ -12,7 +12,7 @@ from fastapi import APIRouter, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
 
-from app.services import admin_user_service, auth_service, log_service, role_service
+from app.services import admin_user_service, auth_service, log_service, permission_decorator, role_service, validators
 
 BASE_DIR = Path(__file__).resolve().parents[1]
 TEMPLATES_DIR = BASE_DIR / "templates"
@@ -63,10 +63,19 @@ def build_form_data(values: dict[str, Any]) -> dict[str, Any]:
 
 
 def form_errors(values: dict[str, Any], is_create: bool, role_slugs: set[str]) -> list[str]:
+    """统一校验管理员表单字段，降低二开重复校验成本。"""
+
     errors: list[str] = []
-    if len(values.get("username", "")) < 3:
-        errors.append("账号至少 3 个字符")
-    if len(values.get("display_name", "")) < 2:
+
+    username_error = validators.validate_admin_username(str(values.get("username", "")))
+    if username_error:
+        errors.append(username_error)
+
+    email_error = validators.validate_optional_email(str(values.get("email", "")))
+    if email_error:
+        errors.append(email_error)
+
+    if len(str(values.get("display_name", ""))) < 2:
         errors.append("显示名称至少 2 个字符")
     if values.get("status") not in STATUS_META:
         errors.append("状态不合法")
@@ -268,11 +277,8 @@ async def admin_users_edit(request: Request, item_id: PydanticObjectId) -> HTMLR
     return templates.TemplateResponse("partials/admin_users_form.html", context)
 
 
-@router.post(
-    "/users",
-    response_class=HTMLResponse,
-    openapi_extra={"permission": {"resource": "admin_users", "action": "create"}},
-)
+@router.post("/users", response_class=HTMLResponse)
+@permission_decorator.permission_meta("admin_users", "create")
 async def admin_users_create(
     request: Request,
     username: str = Form(""),
@@ -288,9 +294,9 @@ async def admin_users_create(
     role_slugs = {item.slug for item in roles}
     form = build_form_data(
         {
-            "username": username.strip(),
+            "username": validators.normalize_admin_username(username),
             "display_name": display_name.strip(),
-            "email": email.strip(),
+            "email": validators.normalize_email(email),
             "role_slug": role_slug,
             "status": status,
             "password": password,
@@ -351,11 +357,8 @@ async def admin_users_create(
     return response
 
 
-@router.post(
-    "/users/{item_id}",
-    response_class=HTMLResponse,
-    openapi_extra={"permission": {"resource": "admin_users", "action": "update"}},
-)
+@router.post("/users/{item_id}", response_class=HTMLResponse)
+@permission_decorator.permission_meta("admin_users", "update")
 async def admin_users_update(
     request: Request,
     item_id: PydanticObjectId,
@@ -377,7 +380,7 @@ async def admin_users_update(
         {
             "username": item.username,
             "display_name": display_name.strip(),
-            "email": email.strip(),
+            "email": validators.normalize_email(email),
             "role_slug": role_slug,
             "status": status,
             "password": password,
@@ -436,11 +439,8 @@ async def admin_users_update(
     return response
 
 
-@router.delete(
-    "/users/{item_id}",
-    response_class=HTMLResponse,
-    openapi_extra={"permission": {"resource": "admin_users", "action": "delete"}},
-)
+@router.delete("/users/{item_id}", response_class=HTMLResponse)
+@permission_decorator.permission_meta("admin_users", "delete")
 async def admin_users_delete(request: Request, item_id: PydanticObjectId) -> HTMLResponse:
     request_values = await read_request_values(request)
     filters, page = parse_admin_filters(request_values)

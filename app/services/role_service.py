@@ -7,6 +7,7 @@ from typing import Any
 from app.apps.admin.registry import ADMIN_TREE, iter_leaf_nodes
 from app.models import AdminUser, Role
 from app.models.role import utc_now
+from app.services import validators
 
 DEFAULT_ROLES = [
     {"name": "超级管理员", "slug": "super"},
@@ -15,6 +16,21 @@ DEFAULT_ROLES = [
 ]
 
 SYSTEM_ROLE_SLUGS = {item["slug"] for item in DEFAULT_ROLES}
+ROLE_TRANSFER_VERSION = 1
+
+_RESOURCE_ACTIONS = {
+    node["key"]: set(node.get("actions", []))
+    for node in iter_leaf_nodes(ADMIN_TREE)
+}
+_RESOURCE_META = {
+    node["key"]: node
+    for node in iter_leaf_nodes(ADMIN_TREE)
+}
+
+
+def _build_permission_description(node: dict[str, Any]) -> str:
+    """构建权限描述文本，便于日志与导出阅读。"""
+    return f"{node['name']} | {node['url']}"
 
 
 def build_default_role_permissions(role_slug: str, owner: str = "system") -> list[dict[str, Any]]:
@@ -32,7 +48,8 @@ def build_default_role_permissions(role_slug: str, owner: str = "system") -> lis
         actions = action_picker(node.get("actions", []))
         if not actions:
             continue
-        description = f"{node['name']} | {node['url']}"
+
+        description = _build_permission_description(node)
         for action in actions:
             permissions.append(
                 {
@@ -50,10 +67,14 @@ def build_default_role_permissions(role_slug: str, owner: str = "system") -> lis
 
 
 async def list_roles() -> list[Role]:
+    """查询全部角色列表。"""
+
     return await Role.find_all().sort("slug").to_list()
 
 
 async def get_role_by_slug(slug: str) -> Role | None:
+    """按 slug 查询角色。"""
+
     return await Role.find_one(Role.slug == slug)
 
 
@@ -70,7 +91,57 @@ async def role_in_use(slug: str) -> bool:
     return admin is not None
 
 
+def _sanitize_permissions(raw_permissions: Any, owner: str) -> list[dict[str, Any]]:
+    """清洗导入权限并兜底 read 依赖，防止脏数据进入数据库。"""
+
+    permission_map: dict[str, set[str]] = {}
+    for item in raw_permissions or []:
+        if not isinstance(item, dict):
+            continue
+
+        resource = str(item.get("resource") or "").strip()
+        action = str(item.get("action") or "").strip().lower()
+        status = str(item.get("status") or "enabled").strip().lower()
+        if status != "enabled":
+            continue
+        if action not in _RESOURCE_ACTIONS.get(resource, set()):
+            continue
+        permission_map.setdefault(resource, set()).add(action)
+
+    normalized_permissions: list[dict[str, Any]] = []
+    for resource, actions in permission_map.items():
+        allowed_actions = _RESOURCE_ACTIONS.get(resource, set())
+        action_set = set(actions) & allowed_actions
+
+        if "read" in allowed_actions and "read" not in action_set:
+            action_set.discard("create")
+            action_set.discard("update")
+            action_set.discard("delete")
+
+        node = _RESOURCE_META.get(resource)
+        if not node:
+            continue
+
+        description = _build_permission_description(node)
+        for action in sorted(action_set):
+            normalized_permissions.append(
+                {
+                    "resource": resource,
+                    "action": action,
+                    "priority": 3,
+                    "status": "enabled",
+                    "owner": owner,
+                    "tags": ["imported"],
+                    "description": description,
+                }
+            )
+
+    return normalized_permissions
+
+
 async def create_role(payload: dict[str, Any]) -> Role:
+    """创建角色。"""
+
     role = Role(
         name=payload["name"],
         slug=payload["slug"],
@@ -84,6 +155,8 @@ async def create_role(payload: dict[str, Any]) -> Role:
 
 
 async def update_role(role: Role, payload: dict[str, Any]) -> Role:
+    """更新角色。"""
+
     role.name = payload["name"]
     role.status = payload.get("status", role.status)
     role.description = payload.get("description", role.description)
@@ -95,10 +168,146 @@ async def update_role(role: Role, payload: dict[str, Any]) -> Role:
 
 
 async def delete_role(role: Role) -> None:
+    """删除角色。"""
+
     await role.delete()
 
 
+def _serialize_permissions(raw_permissions: Any) -> list[dict[str, Any]]:
+    """序列化角色权限，便于导出 JSON。"""
+
+    items: list[dict[str, Any]] = []
+    for item in raw_permissions or []:
+        if isinstance(item, dict):
+            resource = str(item.get("resource") or "").strip()
+            action = str(item.get("action") or "").strip()
+            status = str(item.get("status") or "enabled").strip()
+            owner = str(item.get("owner") or "").strip()
+            description = str(item.get("description") or "").strip()
+        else:
+            resource = str(getattr(item, "resource", "") or "").strip()
+            action = str(getattr(item, "action", "") or "").strip()
+            status = str(getattr(item, "status", "enabled") or "enabled").strip()
+            owner = str(getattr(item, "owner", "") or "").strip()
+            description = str(getattr(item, "description", "") or "").strip()
+
+        if not resource or not action:
+            continue
+
+        items.append(
+            {
+                "resource": resource,
+                "action": action,
+                "status": status,
+                "owner": owner,
+                "description": description,
+            }
+        )
+
+    return items
+
+
+async def export_roles_payload(include_system: bool = True) -> dict[str, Any]:
+    """导出角色权限配置（JSON payload）。"""
+
+    roles = await list_roles()
+    result_roles: list[dict[str, Any]] = []
+    for role in roles:
+        if not include_system and is_system_role(role.slug):
+            continue
+
+        result_roles.append(
+            {
+                "name": role.name,
+                "slug": role.slug,
+                "status": role.status,
+                "description": role.description,
+                "permissions": _serialize_permissions(role.permissions),
+                "updated_at": role.updated_at.isoformat() if role.updated_at else "",
+            }
+        )
+
+    return {
+        "version": ROLE_TRANSFER_VERSION,
+        "exported_at": utc_now().isoformat(),
+        "roles": result_roles,
+    }
+
+
+async def import_roles_payload(
+    payload: dict[str, Any],
+    *,
+    owner: str,
+    allow_system: bool = True,
+) -> dict[str, Any]:
+    """导入角色权限配置，支持创建与更新。"""
+
+    raw_roles = payload.get("roles", [])
+    if not isinstance(raw_roles, list):
+        return {
+            "total": 0,
+            "created": 0,
+            "updated": 0,
+            "skipped": 1,
+            "errors": ["roles 字段必须为数组"],
+        }
+
+    summary = {
+        "total": len(raw_roles),
+        "created": 0,
+        "updated": 0,
+        "skipped": 0,
+        "errors": [],
+    }
+
+    for index, raw_role in enumerate(raw_roles, start=1):
+        if not isinstance(raw_role, dict):
+            summary["skipped"] += 1
+            summary["errors"].append(f"第 {index} 项不是对象")
+            continue
+
+        slug = validators.normalize_role_slug(str(raw_role.get("slug", "")))
+        slug_error = validators.validate_role_slug(slug)
+        name = str(raw_role.get("name", "")).strip()
+        if slug_error:
+            summary["skipped"] += 1
+            summary["errors"].append(f"第 {index} 项 slug 非法：{slug_error}")
+            continue
+        if len(name) < 2:
+            summary["skipped"] += 1
+            summary["errors"].append(f"第 {index} 项角色名称至少 2 个字符")
+            continue
+        if is_system_role(slug) and not allow_system:
+            summary["skipped"] += 1
+            summary["errors"].append(f"第 {index} 项系统角色不允许覆盖")
+            continue
+
+        status = str(raw_role.get("status", "enabled")).strip().lower()
+        if status not in {"enabled", "disabled"}:
+            status = "enabled"
+
+        role_payload = {
+            "name": name,
+            "slug": slug,
+            "status": status,
+            "description": str(raw_role.get("description", "")).strip()[:120],
+            "permissions": _sanitize_permissions(raw_role.get("permissions", []), owner),
+        }
+
+        current = await get_role_by_slug(slug)
+        if current is None:
+            await create_role(role_payload)
+            summary["created"] += 1
+        else:
+            await update_role(current, role_payload)
+            summary["updated"] += 1
+
+    return summary
+
+
 async def ensure_default_roles() -> None:
+    """初始化系统默认角色。"""
+
     for item in DEFAULT_ROLES:
         default_permissions = build_default_role_permissions(item["slug"], owner="system")
         role = await get_role_by_slug(item["slug"])

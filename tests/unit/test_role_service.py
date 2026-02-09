@@ -54,3 +54,100 @@ async def test_role_not_in_use(monkeypatch) -> None:
 
     monkeypatch.setattr(role_service.AdminUser, "find_one", fake_find_one)
     assert await role_service.role_in_use("ops") is False
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_export_roles_payload_can_skip_system_roles(monkeypatch) -> None:
+    roles = [
+        SimpleNamespace(
+            name="超级管理员",
+            slug="super",
+            status="enabled",
+            description="",
+            permissions=[{"resource": "rbac", "action": "read", "status": "enabled"}],
+            updated_at=SimpleNamespace(isoformat=lambda: "2026-01-01T00:00:00+00:00"),
+        ),
+        SimpleNamespace(
+            name="运维",
+            slug="ops",
+            status="enabled",
+            description="",
+            permissions=[{"resource": "admin_users", "action": "read", "status": "enabled"}],
+            updated_at=SimpleNamespace(isoformat=lambda: "2026-01-02T00:00:00+00:00"),
+        ),
+    ]
+
+    async def fake_list_roles() -> list[SimpleNamespace]:
+        return roles
+
+    monkeypatch.setattr(role_service, "list_roles", fake_list_roles)
+
+    payload = await role_service.export_roles_payload(include_system=False)
+
+    assert payload["version"] == role_service.ROLE_TRANSFER_VERSION
+    assert [item["slug"] for item in payload["roles"]] == ["ops"]
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_import_roles_payload_creates_and_updates(monkeypatch) -> None:
+    payload = {
+        "roles": [
+            {
+                "name": "运维",
+                "slug": "ops",
+                "status": "enabled",
+                "permissions": [
+                    {"resource": "admin_users", "action": "read", "status": "enabled"},
+                    {"resource": "admin_users", "action": "update", "status": "enabled"},
+                ],
+            },
+            {
+                "name": "开发",
+                "slug": "dev",
+                "status": "enabled",
+                "permissions": [
+                    {"resource": "admin_users", "action": "read", "status": "enabled"},
+                ],
+            },
+        ]
+    }
+
+    existing = SimpleNamespace(slug="dev", name="开发")
+    created_payloads: list[dict] = []
+    updated_payloads: list[dict] = []
+
+    async def fake_get_role_by_slug(slug: str):
+        if slug == "dev":
+            return existing
+        return None
+
+    async def fake_create_role(item: dict) -> SimpleNamespace:
+        created_payloads.append(item)
+        return SimpleNamespace(**item)
+
+    async def fake_update_role(role, item: dict):
+        updated_payloads.append(item)
+        return role
+
+    monkeypatch.setattr(role_service, "get_role_by_slug", fake_get_role_by_slug)
+    monkeypatch.setattr(role_service, "create_role", fake_create_role)
+    monkeypatch.setattr(role_service, "update_role", fake_update_role)
+
+    summary = await role_service.import_roles_payload(payload, owner="tester", allow_system=False)
+
+    assert summary["created"] == 1
+    assert summary["updated"] == 1
+    assert summary["skipped"] == 0
+    assert created_payloads[0]["slug"] == "ops"
+    assert any(item["resource"] == "admin_users" and item["action"] == "update" for item in created_payloads[0]["permissions"])
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_import_roles_payload_rejects_invalid_roles_field() -> None:
+    summary = await role_service.import_roles_payload({"roles": {}}, owner="tester")
+
+    assert summary["skipped"] == 1
+    assert "roles 字段必须为数组" in summary["errors"]

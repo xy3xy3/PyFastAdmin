@@ -170,7 +170,7 @@
   }
 
   .admin-workspace {
-    @apply ml-64 flex-1;
+    @apply ml-64 min-w-0 flex-1;
     transition: margin-left 0.2s ease;
   }
 
@@ -203,7 +203,7 @@
   }
 
   .admin-content {
-    @apply p-6;
+    @apply min-w-0 p-6;
   }
 
   .breadcrumb {

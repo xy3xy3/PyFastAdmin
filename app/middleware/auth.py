@@ -56,7 +56,10 @@ class AdminAuthMiddleware(BaseHTTPMiddleware):
                 return RedirectResponse(url=f"/admin/login?next={next_url}", status_code=302)
 
             needed = permission_service.required_permission(path, request.method)
-            if needed and not permission_service.can(permission_map, needed[0], needed[1]):
+            if needed is None:
+                return forbidden_response(request, "当前请求未注册权限映射，已被系统拒绝访问。")
+
+            if not permission_service.can(permission_map, needed[0], needed[1]):
                 return forbidden_response(request, "当前账号没有执行该操作的权限。")
 
         return await call_next(request)

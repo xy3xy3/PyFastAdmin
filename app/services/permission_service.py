@@ -15,21 +15,6 @@ _RESOURCE_ACTIONS: dict[str, set[str]] = {
     for node in iter_leaf_nodes(ADMIN_TREE)
 }
 
-
-def _read_only_permissions() -> dict[str, set[str]]:
-    permission_map: dict[str, set[str]] = {}
-    for resource, actions in _RESOURCE_ACTIONS.items():
-        if "read" in actions:
-            permission_map[resource] = {"read"}
-    return permission_map
-
-
-FULL_PERMISSION_MAP: dict[str, set[str]] = {
-    resource: set(actions) for resource, actions in _RESOURCE_ACTIONS.items()
-}
-READ_ONLY_PERMISSION_MAP: dict[str, set[str]] = _read_only_permissions()
-
-
 def _normalize_permission_items(items: list[Any] | None) -> dict[str, set[str]]:
     permission_map: dict[str, set[str]] = {}
     for item in items or []:
@@ -47,8 +32,8 @@ def _normalize_permission_items(items: list[Any] | None) -> dict[str, set[str]]:
     return permission_map
 
 
-def _apply_action_constraints(permission_map: dict[str, set[str]], role_slug: str) -> dict[str, set[str]]:
-    """约束动作依赖：有增删改必须有查看；viewer 仅保留查看。"""
+def _apply_action_constraints(permission_map: dict[str, set[str]]) -> dict[str, set[str]]:
+    """约束动作依赖：有增删改必须有查看。"""
 
     normalized: dict[str, set[str]] = {}
     for resource, actions in permission_map.items():
@@ -62,22 +47,10 @@ def _apply_action_constraints(permission_map: dict[str, set[str]], role_slug: st
             action_set.discard("update")
             action_set.discard("delete")
 
-        if role_slug == "viewer":
-            action_set = {"read"} if "read" in action_set else set()
-
         if action_set:
             normalized[resource] = action_set
 
     return normalized
-
-
-def default_permission_map(role_slug: str) -> dict[str, set[str]]:
-    """默认角色兜底权限。"""
-    if role_slug in {"super", "admin"}:
-        return {resource: set(actions) for resource, actions in FULL_PERMISSION_MAP.items()}
-    if role_slug == "viewer":
-        return {resource: set(actions) for resource, actions in READ_ONLY_PERMISSION_MAP.items()}
-    return {}
 
 
 async def resolve_permission_map(request: Request) -> dict[str, set[str]]:
@@ -102,12 +75,13 @@ async def resolve_permission_map(request: Request) -> dict[str, set[str]]:
         request.state.permission_flags = build_permission_flags({})
         return {}
 
-    if role:
-        permission_map = _normalize_permission_items(role.permissions)
-    else:
-        permission_map = default_permission_map(admin.role_slug)
+    if not role:
+        request.state.permission_map = {}
+        request.state.permission_flags = build_permission_flags({})
+        return {}
 
-    permission_map = _apply_action_constraints(permission_map, admin.role_slug)
+    permission_map = _normalize_permission_items(role.permissions)
+    permission_map = _apply_action_constraints(permission_map)
 
     request.state.permission_map = permission_map
     request.state.permission_flags = build_permission_flags(permission_map)
@@ -149,7 +123,7 @@ def required_permission(path: str, method: str) -> tuple[str, str] | None:
     """将请求路径映射到资源与动作。"""
 
     if method == "GET":
-        if path in {"/admin", "/admin/dashboard"}:
+        if path in {"/admin", "/admin/", "/admin/dashboard"}:
             return ("dashboard_home", "read")
         if path in {"/admin/rbac", "/admin/rbac/roles/table"}:
             return ("rbac", "read")

@@ -6,6 +6,7 @@ from datetime import datetime, timezone
 from typing import Literal
 
 from beanie import Document
+from pymongo import IndexModel
 from pydantic import BaseModel, Field
 
 
@@ -36,3 +37,4 @@ class Role(Document):
 
     class Settings:
         name = "roles"
+        indexes = [IndexModel([("slug", 1)], unique=True, name="uniq_role_slug")]

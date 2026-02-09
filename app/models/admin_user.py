@@ -6,6 +6,7 @@ from datetime import datetime, timezone
 from typing import Literal
 
 from beanie import Document
+from pymongo import IndexModel
 from pydantic import Field
 
 
@@ -28,3 +29,4 @@ class AdminUser(Document):
 
     class Settings:
         name = "admin_users"
+        indexes = [IndexModel([("username", 1)], unique=True, name="uniq_admin_username")]

@@ -194,9 +194,10 @@ def build_checked_map(form_data) -> dict[str, set[str]]:
     return checked_map
 
 
-def build_permissions(form_data, owner: str, role_slug: str = "") -> list[dict[str, Any]]:
+def build_permissions(form_data, owner: str) -> list[dict[str, Any]]:
+    """将表单勾选项转换为权限列表，并统一补齐 read 依赖。"""
+
     permissions: list[dict[str, Any]] = []
-    force_read_only = role_slug == "viewer"
     for node in iter_leaf_nodes(ADMIN_TREE):
         allowed_actions = set(node.get("actions", []))
         actions = [
@@ -204,11 +205,8 @@ def build_permissions(form_data, owner: str, role_slug: str = "") -> list[dict[s
             for action in form_data.getlist(f"perm_{node['key']}")
             if str(action) in allowed_actions
         ]
-        if "read" in allowed_actions:
-            if force_read_only:
-                actions = ["read"] if actions else []
-            elif any(action != "read" for action in actions) and "read" not in actions:
-                actions.append("read")
+        if "read" in allowed_actions and any(action != "read" for action in actions) and "read" not in actions:
+            actions.append("read")
 
         for action in actions:
             description = f"{node['name']} | {node['url']}"
@@ -384,7 +382,7 @@ async def role_create(
         return templates.TemplateResponse("partials/role_form.html", context, status_code=422)
 
     owner = request.session.get("admin_name") or "system"
-    form["permissions"] = build_permissions(form_data, owner, role_slug=form["slug"])
+    form["permissions"] = build_permissions(form_data, owner)
     await role_service.create_role(form)
     await log_service.record_request(
         request,
@@ -444,7 +442,7 @@ async def role_update(
         return templates.TemplateResponse("partials/role_form.html", context, status_code=422)
 
     owner = request.session.get("admin_name") or "system"
-    form["permissions"] = build_permissions(form_data, owner, role_slug=role.slug)
+    form["permissions"] = build_permissions(form_data, owner)
     await role_service.update_role(role, form)
     await log_service.record_request(
         request,
@@ -473,6 +471,12 @@ async def role_delete(request: Request, slug: str) -> HTMLResponse:
     role = await role_service.get_role_by_slug(slug)
     if not role:
         raise HTTPException(status_code=404, detail="角色不存在")
+
+    if role_service.is_system_role(role.slug):
+        raise HTTPException(status_code=400, detail="系统内置角色不允许删除")
+
+    if await role_service.role_in_use(role.slug):
+        raise HTTPException(status_code=400, detail="该角色仍被管理员使用，无法删除")
 
     await role_service.delete_role(role)
     await log_service.record_request(

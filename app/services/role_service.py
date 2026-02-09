@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import Any
 
 from app.apps.admin.registry import ADMIN_TREE, iter_leaf_nodes
-from app.models import Role
+from app.models import AdminUser, Role
 from app.models.role import utc_now
 
 DEFAULT_ROLES = [
@@ -13,6 +13,8 @@ DEFAULT_ROLES = [
     {"name": "管理员", "slug": "admin"},
     {"name": "只读", "slug": "viewer"},
 ]
+
+SYSTEM_ROLE_SLUGS = {item["slug"] for item in DEFAULT_ROLES}
 
 
 def build_default_role_permissions(role_slug: str, owner: str = "system") -> list[dict[str, Any]]:
@@ -53,6 +55,19 @@ async def list_roles() -> list[Role]:
 
 async def get_role_by_slug(slug: str) -> Role | None:
     return await Role.find_one(Role.slug == slug)
+
+
+def is_system_role(slug: str) -> bool:
+    """判断是否为系统内置角色。"""
+
+    return slug in SYSTEM_ROLE_SLUGS
+
+
+async def role_in_use(slug: str) -> bool:
+    """判断角色是否仍被管理员账号引用。"""
+
+    admin = await AdminUser.find_one({"role_slug": slug})
+    return admin is not None
 
 
 async def create_role(payload: dict[str, Any]) -> Role:

@@ -2,9 +2,12 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass
+from functools import lru_cache
 import re
 from typing import Any
 
+from fastapi.routing import APIRoute
 from starlette.requests import Request
 
 from app.apps.admin.registry import ADMIN_TREE, iter_leaf_nodes
@@ -14,6 +17,16 @@ _RESOURCE_ACTIONS: dict[str, set[str]] = {
     node["key"]: set(node.get("actions", []))
     for node in iter_leaf_nodes(ADMIN_TREE)
 }
+
+_RESOURCE_URLS: list[tuple[str, str]] = sorted(
+    [
+        ((str(node.get("url") or "").rstrip("/") or "/"), node["key"])
+        for node in iter_leaf_nodes(ADMIN_TREE)
+        if node.get("url")
+    ],
+    key=lambda item: len(item[0]),
+    reverse=True,
+)
 
 def _normalize_permission_items(items: list[Any] | None) -> dict[str, set[str]]:
     permission_map: dict[str, set[str]] = {}
@@ -119,53 +132,132 @@ def build_permission_flags(permission_map: dict[str, set[str]]) -> dict[str, Any
     return flags
 
 
-def required_permission(path: str, method: str) -> tuple[str, str] | None:
-    """将请求路径映射到资源与动作。"""
+@dataclass(frozen=True)
+class PermissionRouteRule:
+    """路由权限规则。"""
+
+    path_regex: re.Pattern[str]
+    method: str
+    resource: str
+    action: str
+
+
+def _normalize_path(path: str) -> str:
+    """统一路径格式，避免尾斜杠导致映射失败。"""
+
+    normalized = path.rstrip("/")
+    return normalized or "/"
+
+
+def _resolve_resource_from_path(path: str) -> str | None:
+    """根据路由路径推导对应资源键。"""
+
+    normalized = _normalize_path(path)
+    if normalized == "/admin":
+        return "dashboard_home"
+
+    for base_url, resource in _RESOURCE_URLS:
+        if normalized == base_url or normalized.startswith(f"{base_url}/"):
+            return resource
+    return None
+
+
+def _compile_route_regex(path: str) -> re.Pattern[str]:
+    """把 FastAPI 模板路径编译为运行时匹配正则。"""
+
+    normalized = _normalize_path(path)
+    escaped = re.escape(normalized)
+    pattern = re.sub(r"\\\{[^/]+\\\}", r"[^/]+", escaped)
+    return re.compile(rf"^{pattern}$")
+
+
+def _infer_action(resource: str, method: str, path: str) -> str | None:
+    """按路由声明和 HTTP 方法推导动作。"""
+
+    allowed_actions = _RESOURCE_ACTIONS.get(resource, set())
+    normalized = _normalize_path(path)
 
     if method == "GET":
-        if path in {"/admin", "/admin/", "/admin/dashboard"}:
-            return ("dashboard_home", "read")
-        if path in {"/admin/rbac", "/admin/rbac/roles/table"}:
-            return ("rbac", "read")
-        if path == "/admin/rbac/roles/new":
-            return ("rbac", "create")
-        if re.fullmatch(r"/admin/rbac/roles/[^/]+/edit", path):
-            return ("rbac", "update")
-        if path in {"/admin/users", "/admin/users/table"}:
-            return ("admin_users", "read")
-        if path == "/admin/users/new":
-            return ("admin_users", "create")
-        if re.fullmatch(r"/admin/users/[^/]+/edit", path):
-            return ("admin_users", "update")
-        if path == "/admin/profile":
-            return ("profile", "read")
-        if path == "/admin/password":
-            return ("password", "read")
-        if path == "/admin/config":
-            return ("config", "read")
-        if path in {"/admin/logs", "/admin/logs/table"}:
-            return ("operation_logs", "read")
-
-    if method == "POST":
-        if path == "/admin/rbac/roles":
-            return ("rbac", "create")
-        if re.fullmatch(r"/admin/rbac/roles/[^/]+", path):
-            return ("rbac", "update")
-        if path == "/admin/users":
-            return ("admin_users", "create")
-        if re.fullmatch(r"/admin/users/[^/]+", path):
-            return ("admin_users", "update")
-        if path == "/admin/profile":
-            return ("profile", "update")
-        if path == "/admin/password":
-            return ("password", "update")
-        if path == "/admin/config":
-            return ("config", "update")
+        if normalized.endswith("/new") and "create" in allowed_actions:
+            return "create"
+        if normalized.endswith("/edit") and "update" in allowed_actions:
+            return "update"
+        return "read" if "read" in allowed_actions else None
 
     if method == "DELETE":
-        if re.fullmatch(r"/admin/rbac/roles/[^/]+", path):
-            return ("rbac", "delete")
-        if re.fullmatch(r"/admin/users/[^/]+", path):
-            return ("admin_users", "delete")
+        return "delete" if "delete" in allowed_actions else None
+
+    if method not in {"POST", "PUT", "PATCH"}:
+        return None
+
+    if normalized.endswith("/edit") and "update" in allowed_actions:
+        return "update"
+    if "{" in path and "}" in path and "update" in allowed_actions:
+        return "update"
+    if "create" not in allowed_actions and "update" in allowed_actions:
+        return "update"
+    if "create" in allowed_actions:
+        return "create"
+    if "update" in allowed_actions:
+        return "update"
+    return None
+
+
+@lru_cache(maxsize=1)
+def _build_permission_rules() -> tuple[PermissionRouteRule, ...]:
+    """从路由声明自动生成权限映射规则。"""
+
+    # 延迟导入，避免在模块加载阶段产生循环依赖。
+    from app.main import app
+
+    rules: list[PermissionRouteRule] = []
+    for route in app.routes:
+        if not isinstance(route, APIRoute):
+            continue
+
+        route_path = _normalize_path(route.path)
+        if not route_path.startswith("/admin"):
+            continue
+        if route_path.startswith("/admin/login") or route_path == "/admin/logout":
+            continue
+
+        resource = _resolve_resource_from_path(route_path)
+        if not resource:
+            continue
+
+        methods = {method for method in (route.methods or set()) if method in {"GET", "POST", "PUT", "PATCH", "DELETE"}}
+        path_regex = _compile_route_regex(route.path)
+
+        for method in methods:
+            action = _infer_action(resource, method, route.path)
+            if not action:
+                continue
+            rules.append(
+                PermissionRouteRule(
+                    path_regex=path_regex,
+                    method=method,
+                    resource=resource,
+                    action=action,
+                )
+            )
+
+    # 更长路径优先匹配，避免 /admin/users 先于 /admin/users/{id}/edit 命中。
+    rules.sort(key=lambda item: len(item.path_regex.pattern), reverse=True)
+    return tuple(rules)
+
+
+def required_permission(path: str, method: str) -> tuple[str, str] | None:
+    """根据自动生成的规则解析请求资源与动作。"""
+
+    normalized_path = _normalize_path(path)
+    normalized_method = method.upper()
+    if normalized_method == "HEAD":
+        normalized_method = "GET"
+
+    for rule in _build_permission_rules():
+        if rule.method != normalized_method:
+            continue
+        if rule.path_regex.fullmatch(normalized_path):
+            return (rule.resource, rule.action)
 
     return None

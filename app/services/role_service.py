@@ -305,8 +305,27 @@ async def import_roles_payload(
     return summary
 
 
+def _extract_permission_pairs(raw_permissions: Any) -> set[tuple[str, str]]:
+    """提取权限键集合，用于补齐缺失的系统默认权限。"""
+
+    pairs: set[tuple[str, str]] = set()
+    for item in raw_permissions or []:
+        if isinstance(item, dict):
+            resource = str(item.get("resource") or "").strip()
+            action = str(item.get("action") or "").strip().lower()
+        else:
+            resource = str(getattr(item, "resource", "") or "").strip()
+            action = str(getattr(item, "action", "") or "").strip().lower()
+
+        if not resource or action not in _RESOURCE_ACTIONS.get(resource, set()):
+            continue
+        pairs.add((resource, action))
+
+    return pairs
+
+
 async def ensure_default_roles() -> None:
-    """初始化系统默认角色。"""
+    """初始化系统默认角色，并补齐新增资源的默认权限。"""
 
     for item in DEFAULT_ROLES:
         default_permissions = build_default_role_permissions(item["slug"], owner="system")
@@ -327,3 +346,17 @@ async def ensure_default_roles() -> None:
             role.permissions = default_permissions
             role.updated_at = utc_now()
             await role.save()
+            continue
+
+        existing_pairs = _extract_permission_pairs(role.permissions)
+        missing_permissions = [
+            permission
+            for permission in default_permissions
+            if (permission["resource"], permission["action"]) not in existing_pairs
+        ]
+        if not missing_permissions:
+            continue
+
+        role.permissions = [*(role.permissions or []), *missing_permissions]
+        role.updated_at = utc_now()
+        await role.save()

@@ -151,3 +151,44 @@ async def test_import_roles_payload_rejects_invalid_roles_field() -> None:
 
     assert summary["skipped"] == 1
     assert "roles 字段必须为数组" in summary["errors"]
+
+
+@pytest.mark.unit
+@pytest.mark.asyncio
+async def test_ensure_default_roles_appends_missing_permissions(monkeypatch) -> None:
+    """系统默认角色存在时应补齐新增资源权限。"""
+
+    class FakeRole(SimpleNamespace):
+        async def save(self) -> None:
+            return None
+
+    role = FakeRole(
+        slug="super",
+        permissions=[
+            {"resource": "config", "action": "read", "status": "enabled"},
+            {"resource": "config", "action": "update", "status": "enabled"},
+        ],
+        updated_at=None,
+    )
+
+    async def fake_get_role_by_slug(slug: str):
+        if slug == "super":
+            return role
+        return None
+
+    created_payloads: list[dict] = []
+
+    async def fake_create_role(payload: dict):
+        created_payloads.append(payload)
+        return SimpleNamespace(**payload)
+
+    monkeypatch.setattr(role_service, "get_role_by_slug", fake_get_role_by_slug)
+    monkeypatch.setattr(role_service, "create_role", fake_create_role)
+
+    await role_service.ensure_default_roles()
+
+    restored_pairs = {(item["resource"], item["action"]) for item in role.permissions}
+    assert ("backup", "read") in restored_pairs
+    assert ("backup", "update") in restored_pairs
+    assert created_payloads
+    assert {item["slug"] for item in created_payloads} == {"admin", "viewer"}

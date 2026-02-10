@@ -63,6 +63,12 @@ def base_context(request: Request) -> dict[str, Any]:
     }
 
 
+def _is_htmx_request(request: Request) -> bool:
+    """判断是否为 HTMX 请求，用于区分表单错误返回策略。"""
+
+    return request.headers.get("hx-request", "").strip().lower() == "true"
+
+
 def build_role_form(values: dict[str, Any]) -> dict[str, Any]:
     """构建角色表单默认值。"""
 
@@ -434,7 +440,8 @@ async def role_import(request: Request) -> HTMLResponse:
             "filters": filters,
             "page": page,
         }
-        return templates.TemplateResponse("partials/role_import_form.html", context, status_code=422)
+        error_status = 200 if _is_htmx_request(request) else 422
+        return templates.TemplateResponse("partials/role_import_form.html", context, status_code=error_status)
 
     owner = request.session.get("admin_name") or "system"
     summary = await role_service.import_roles_payload(
@@ -454,6 +461,8 @@ async def role_import(request: Request) -> HTMLResponse:
 
     context = await build_role_table_context(request, filters, page)
     response = templates.TemplateResponse("partials/role_table.html", context)
+    response.headers["HX-Retarget"] = "#role-table"
+    response.headers["HX-Reswap"] = "outerHTML"
     has_errors = bool(summary["errors"])
     message = summary_message
     if has_errors:
@@ -567,7 +576,8 @@ async def role_create(
             "filters": filters,
             "page": page,
         }
-        return templates.TemplateResponse("partials/role_form.html", context, status_code=422)
+        error_status = 200 if _is_htmx_request(request) else 422
+        return templates.TemplateResponse("partials/role_form.html", context, status_code=error_status)
 
     owner = request.session.get("admin_name") or "system"
     form["permissions"] = build_permissions(form_data, owner)
@@ -582,6 +592,8 @@ async def role_create(
     )
     context = await build_role_table_context(request, filters, page)
     response = templates.TemplateResponse("partials/role_table.html", context)
+    response.headers["HX-Retarget"] = "#role-table"
+    response.headers["HX-Reswap"] = "outerHTML"
     response.headers["HX-Trigger"] = json.dumps(
         {
             "rbac-toast": {"title": "已创建", "message": "角色已保存", "variant": "success"},
@@ -630,7 +642,8 @@ async def role_update(
             "filters": filters,
             "page": page,
         }
-        return templates.TemplateResponse("partials/role_form.html", context, status_code=422)
+        error_status = 200 if _is_htmx_request(request) else 422
+        return templates.TemplateResponse("partials/role_form.html", context, status_code=error_status)
 
     owner = request.session.get("admin_name") or "system"
     form["permissions"] = build_permissions(form_data, owner)
@@ -645,6 +658,8 @@ async def role_update(
     )
     context = await build_role_table_context(request, filters, page)
     response = templates.TemplateResponse("partials/role_table.html", context)
+    response.headers["HX-Retarget"] = "#role-table"
+    response.headers["HX-Reswap"] = "outerHTML"
     response.headers["HX-Trigger"] = json.dumps(
         {
             "rbac-toast": {"title": "已更新", "message": "角色已修改", "variant": "success"},

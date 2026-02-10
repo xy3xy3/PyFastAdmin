@@ -123,6 +123,9 @@
 ## 5. HTMX + Alpine + Jinja 开发约定
 - 列表页采用“页面 + 表格 partial”模式（如 `.../table`）。
 - 弹窗表单通过 HTMX 加载到 `#modal-body`。
+- **弹窗内提交也必须回写 `#modal-body`**：`hx-target="#modal-body" + hx-swap="innerHTML"`，保证 422/校验失败时错误信息能在弹窗内直接显示。
+- 弹窗提交成功后，如需刷新列表，后端返回表格 partial 时通过 `HX-Retarget: #xxx-table` + `HX-Reswap: outerHTML` 重定向更新目标，并用 `HX-Trigger` 触发关闭弹窗。
+- 后端对 HTMX 弹窗校验失败建议返回表单 partial + `status=200`（非 HTMX 场景保留 422），避免前端只弹通用“请求失败”toast。
 - 列表筛选/分页刷新时，保持 `hx-vals` 透传当前筛选条件和页码。
 - 返回 403 的 HTMX 请求，要由前端统一 toast 反馈（参考 `app/static/js/app.js`）。
 - 新增前端交互逻辑优先复用 `app/static/js/app.js`，避免散落内联脚本。

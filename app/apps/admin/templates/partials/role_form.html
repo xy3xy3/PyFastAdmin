@@ -25,8 +25,8 @@
   <form
     class="grid gap-4"
     hx-post="{{ action }}"
-    hx-target="#role-table"
-    hx-swap="outerHTML"
+    hx-target="#modal-body"
+    hx-swap="innerHTML"
     hx-indicator="#modal-indicator"
   >
     <input type="hidden" name="csrf_token" value="{{ request.state.csrf_token or '' }}" />

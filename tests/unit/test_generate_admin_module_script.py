@@ -37,3 +37,25 @@ def test_main_files_include_model(scaffold_module) -> None:
     rendered = scaffold_module.render_test('demo_inventory')
 
     assert 'Path("app/models/demo_inventory.py").exists()' in rendered
+
+
+@pytest.mark.unit
+def test_render_form_partial_targets_modal_body(scaffold_module) -> None:
+    """脚手架表单应在弹窗内提交并回显错误。"""
+
+    rendered = scaffold_module.render_form_partial('demo_inventory', '示例模块')
+
+    assert 'hx-target="#modal-body"' in rendered
+    assert 'hx-swap="innerHTML"' in rendered
+
+
+@pytest.mark.unit
+def test_render_controller_has_htmx_modal_error_strategy(scaffold_module) -> None:
+    """脚手架控制器应内置 HTMX 弹窗错误回显策略。"""
+
+    rendered = scaffold_module.render_controller('demo_inventory', '示例模块')
+
+    assert 'def _is_htmx_request(request: Request) -> bool:' in rendered
+    assert 'error_status = 200 if _is_htmx_request(request) else 422' in rendered
+    assert 'HX-Retarget' in rendered
+    assert 'HX-Reswap' in rendered

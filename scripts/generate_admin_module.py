@@ -183,6 +183,12 @@ def base_context(request: Request) -> dict[str, Any]:
     }}
 
 
+def _is_htmx_request(request: Request) -> bool:
+    """判断是否为 HTMX 请求，用于区分表单错误返回策略。"""
+
+    return request.headers.get("hx-request", "").strip().lower() == "true"
+
+
 @router.get("/{module}", response_class=HTMLResponse)
 async def {module}_page(request: Request) -> HTMLResponse:
     """模块列表页。"""
@@ -223,6 +229,21 @@ async def {module}_create(request: Request) -> HTMLResponse:
 
     form_data = await request.form()
     payload = dict(form_data)
+
+    errors: list[str] = []
+    if not str(payload.get("name", "")).strip():
+        errors.append("名称不能为空")
+    if errors:
+        context = {{
+            **base_context(request),
+            "mode": "create",
+            "action": "/admin/{module}",
+            "errors": errors,
+            "form": payload,
+        }}
+        error_status = 200 if _is_htmx_request(request) else 422
+        return templates.TemplateResponse("partials/{module}_form.html", context, status_code=error_status)
+
     created = await {module}_service.create_item(payload)
     await log_service.record_request(
         request,
@@ -235,6 +256,8 @@ async def {module}_create(request: Request) -> HTMLResponse:
 
     items = await {module}_service.list_items()
     response = templates.TemplateResponse("partials/{module}_table.html", {{**base_context(request), "items": items}})
+    response.headers["HX-Retarget"] = "#{module}-table"
+    response.headers["HX-Reswap"] = "outerHTML"
     response.headers["HX-Trigger"] = json.dumps(
         {{"rbac-toast": {{"title": "已创建", "message": "记录创建成功", "variant": "success"}}, "rbac-close": True}},
         ensure_ascii=True,
@@ -273,6 +296,21 @@ async def {module}_update(request: Request, item_id: str) -> HTMLResponse:
 
     form_data = await request.form()
     payload = dict(form_data)
+
+    errors: list[str] = []
+    if not str(payload.get("name", "")).strip():
+        errors.append("名称不能为空")
+    if errors:
+        context = {{
+            **base_context(request),
+            "mode": "edit",
+            "action": f"/admin/{module}/{{item_id}}",
+            "errors": errors,
+            "form": payload,
+        }}
+        error_status = 200 if _is_htmx_request(request) else 422
+        return templates.TemplateResponse("partials/{module}_form.html", context, status_code=error_status)
+
     await {module}_service.update_item(item, payload)
     await log_service.record_request(
         request,
@@ -285,6 +323,8 @@ async def {module}_update(request: Request, item_id: str) -> HTMLResponse:
 
     items = await {module}_service.list_items()
     response = templates.TemplateResponse("partials/{module}_table.html", {{**base_context(request), "items": items}})
+    response.headers["HX-Retarget"] = "#{module}-table"
+    response.headers["HX-Reswap"] = "outerHTML"
     response.headers["HX-Trigger"] = json.dumps(
         {{"rbac-toast": {{"title": "已更新", "message": "记录更新成功", "variant": "success"}}, "rbac-close": True}},
         ensure_ascii=True,
@@ -313,6 +353,8 @@ async def {module}_delete(request: Request, item_id: str) -> HTMLResponse:
 
     items = await {module}_service.list_items()
     response = templates.TemplateResponse("partials/{module}_table.html", {{**base_context(request), "items": items}})
+    response.headers["HX-Retarget"] = "#{module}-table"
+    response.headers["HX-Reswap"] = "outerHTML"
     response.headers["HX-Trigger"] = json.dumps(
         {{"rbac-toast": {{"title": "已删除", "message": "记录已删除", "variant": "warning"}}}},
         ensure_ascii=True,
@@ -557,7 +599,7 @@ def render_form_partial(module: str, title: str) -> str:
     </div>
   {{% endif %}}
 
-  <form class="grid gap-4" hx-post="{{{{ action }}}}" hx-target="#{module}-table" hx-swap="outerHTML" hx-indicator="#modal-indicator">
+  <form class="grid gap-4" hx-post="{{{{ action }}}}" hx-target="#modal-body" hx-swap="innerHTML" hx-indicator="#modal-indicator">
     <input type="hidden" name="csrf_token" value="{{{{ request.state.csrf_token or '' }}}}" />
 
     <div>

@@ -51,6 +51,11 @@ def base_context(request: Request) -> dict[str, Any]:
     }
 
 
+def _is_htmx_request(request: Request) -> bool:
+    """判断是否为 HTMX 请求，用于区分表单错误返回策略。"""
+    return request.headers.get("hx-request", "").strip().lower() == "true"
+
+
 def build_form_data(values: dict[str, Any]) -> dict[str, Any]:
     return {
         "username": values.get("username", ""),
@@ -319,8 +324,9 @@ async def admin_users_create(
             "filters": filters,
             "page": page,
         }
+        error_status = 200 if _is_htmx_request(request) else 422
         return templates.TemplateResponse(
-            "partials/admin_users_form.html", context, status_code=422
+            "partials/admin_users_form.html", context, status_code=error_status
         )
 
     payload = {
@@ -343,6 +349,8 @@ async def admin_users_create(
 
     context = await build_admin_table_context(request, filters, page)
     response = templates.TemplateResponse("partials/admin_users_table.html", context)
+    response.headers["HX-Retarget"] = "#admin-table"
+    response.headers["HX-Reswap"] = "outerHTML"
     response.headers["HX-Trigger"] = json.dumps(
         {
             "admin-toast": {
@@ -400,8 +408,9 @@ async def admin_users_update(
             "filters": filters,
             "page": page,
         }
+        error_status = 200 if _is_htmx_request(request) else 422
         return templates.TemplateResponse(
-            "partials/admin_users_form.html", context, status_code=422
+            "partials/admin_users_form.html", context, status_code=error_status
         )
 
     payload = {
@@ -425,6 +434,8 @@ async def admin_users_update(
 
     context = await build_admin_table_context(request, filters, page)
     response = templates.TemplateResponse("partials/admin_users_table.html", context)
+    response.headers["HX-Retarget"] = "#admin-table"
+    response.headers["HX-Reswap"] = "outerHTML"
     response.headers["HX-Trigger"] = json.dumps(
         {
             "admin-toast": {
@@ -462,6 +473,8 @@ async def admin_users_delete(request: Request, item_id: PydanticObjectId) -> HTM
     )
     context = await build_admin_table_context(request, filters, page)
     response = templates.TemplateResponse("partials/admin_users_table.html", context)
+    response.headers["HX-Retarget"] = "#admin-table"
+    response.headers["HX-Reswap"] = "outerHTML"
     response.headers["HX-Trigger"] = json.dumps(
         {
             "admin-toast": {

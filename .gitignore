@@ -43,3 +43,5 @@ refs/*
 # Backup artifacts
 backups/
 !backups/.gitkeep
+
+local/

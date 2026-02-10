@@ -450,6 +450,78 @@ async def admin_users_update(
     return response
 
 
+@router.post("/users/bulk-delete", response_class=HTMLResponse)
+@permission_decorator.permission_meta("admin_users", "delete")
+async def admin_users_bulk_delete(request: Request) -> HTMLResponse:
+    """批量删除管理员账号。"""
+
+    request_values = await read_request_values(request)
+    filters, page = parse_admin_filters(request_values)
+    form_data = await request.form()
+    selected_ids = [str(item).strip() for item in form_data.getlist("selected_ids") if str(item).strip()]
+    selected_ids = list(dict.fromkeys(selected_ids))
+
+    current_admin_id = str(request.session.get("admin_id") or "")
+    deleted_count = 0
+    skipped_self = 0
+    skipped_invalid = 0
+
+    for raw_id in selected_ids:
+        try:
+            object_id = PydanticObjectId(raw_id)
+        except Exception:
+            skipped_invalid += 1
+            continue
+
+        item = await admin_user_service.get_admin(object_id)
+        if not item:
+            skipped_invalid += 1
+            continue
+
+        if str(item.id) == current_admin_id:
+            skipped_self += 1
+            continue
+
+        await admin_user_service.delete_admin(item)
+        deleted_count += 1
+        await log_service.record_request(
+            request,
+            action="delete",
+            module="admin_users",
+            target=f"管理员: {item.display_name}",
+            target_id=str(item.id),
+            detail=f"批量删除管理员账号 {item.username}",
+        )
+
+    context = await build_admin_table_context(request, filters, page)
+    response = templates.TemplateResponse("partials/admin_users_table.html", context)
+    response.headers["HX-Retarget"] = "#admin-table"
+    response.headers["HX-Reswap"] = "outerHTML"
+
+    if deleted_count == 0:
+        toast_message = "未删除任何账号，请先勾选记录"
+    else:
+        extras: list[str] = []
+        if skipped_self:
+            extras.append(f"跳过当前账号 {skipped_self} 条")
+        if skipped_invalid:
+            extras.append(f"跳过无效记录 {skipped_invalid} 条")
+        suffix = f"（{'，'.join(extras)}）" if extras else ""
+        toast_message = f"已删除 {deleted_count} 条管理员账号{suffix}"
+
+    response.headers["HX-Trigger"] = json.dumps(
+        {
+            "admin-toast": {
+                "title": "批量删除完成",
+                "message": toast_message,
+                "variant": "warning",
+            }
+        },
+        ensure_ascii=True,
+    )
+    return response
+
+
 @router.delete("/users/{item_id}", response_class=HTMLResponse)
 @permission_decorator.permission_meta("admin_users", "delete")
 async def admin_users_delete(request: Request, item_id: PydanticObjectId) -> HTMLResponse:

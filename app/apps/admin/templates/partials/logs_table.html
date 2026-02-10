@@ -1,4 +1,5 @@
-<div id="logs-table" class="card p-5">
+<div id="logs-table" class="card p-5" {% if request.state.permission_flags.operation_logs['delete'] %}data-bulk-scope{% endif %}>
+  {% set log_perm = request.state.permission_flags.operation_logs %}
   <div class="flex flex-wrap items-center justify-between gap-3">
     <div>
       <h2 class="text-lg font-semibold text-slate-900">操作日志</h2>
@@ -17,56 +18,159 @@
     </button>
   </div>
 
-  {% if items %}
-    <div class="mt-4 overflow-x-auto rounded-lg border border-slate-200">
-      <table class="w-full min-w-[1150px] text-left text-sm">
-        <thead class="bg-slate-50 text-slate-600">
-          <tr>
-            <th class="px-4 py-3 font-medium">时间</th>
-            <th class="px-4 py-3 font-medium">操作</th>
-            <th class="px-4 py-3 font-medium">模块</th>
-            <th class="px-4 py-3 font-medium">对象</th>
-            <th class="px-4 py-3 font-medium">操作者</th>
-            <th class="px-4 py-3 font-medium">来源</th>
-            <th class="px-4 py-3 font-medium">明细</th>
-          </tr>
-        </thead>
-        <tbody>
-          {% for item in items %}
-            <tr class="border-t border-slate-100">
-              <td class="px-4 py-3 text-slate-500">{{ item.created_at | fmt_dt }}</td>
-              <td class="px-4 py-3">
-                {% if item.action == "create" %}
-                  <span class="tag-compact" style="border-color: #2f855a; color: #2f855a;">{{ action_labels.get(item.action, item.action) }}</span>
-                {% elif item.action == "update" %}
-                  <span class="tag-compact" style="border-color: #3182ce; color: #3182ce;">{{ action_labels.get(item.action, item.action) }}</span>
-                {% elif item.action == "delete" %}
-                  <span class="tag-compact" style="border-color: #c53030; color: #c53030;">{{ action_labels.get(item.action, item.action) }}</span>
-                {% else %}
-                  <span class="tag-compact" style="border-color: #718096; color: #718096;">{{ action_labels.get(item.action, item.action) }}</span>
-                {% endif %}
-              </td>
-              <td class="px-4 py-3 text-slate-600">{{ module_labels.get(item.module, item.module) }}</td>
-              <td class="px-4 py-3">
-                <div class="font-medium text-slate-900">{{ item.target or "-" }}</div>
-                <div class="text-xs text-slate-500">{{ item.target_id or "" }}</div>
-              </td>
-              <td class="px-4 py-3 text-slate-600">{{ item.operator or "system" }}</td>
-              <td class="px-4 py-3 text-xs text-slate-500">
-                <div>{{ item.ip or "-" }}</div>
-                <div class="mt-1">{{ item.method }} {{ item.path }}</div>
-              </td>
-              <td class="px-4 py-3 text-slate-600">{{ item.detail or "-" }}</td>
-            </tr>
-          {% endfor %}
-        </tbody>
-      </table>
-    </div>
+  {% if log_perm['delete'] %}
+    <form
+      class="mt-4 space-y-4"
+      hx-post="/admin/logs/bulk-delete"
+      hx-target="#logs-table"
+      hx-swap="outerHTML"
+      hx-indicator="#global-indicator"
+      hx-confirm="确认批量删除已勾选的日志吗？"
+    >
+      <input type="hidden" name="csrf_token" value="{{ request.state.csrf_token or '' }}" />
+      <input type="hidden" name="search_q" value="{{ filters.search_q }}" />
+      <input type="hidden" name="search_action" value="{{ filters.search_action }}" />
+      <input type="hidden" name="search_module" value="{{ filters.search_module }}" />
+      <input type="hidden" name="search_sort" value="{{ filters.search_sort }}" />
+      <input type="hidden" name="page" value="{{ pagination.page }}" />
+
+      <div class="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-slate-200 bg-slate-50/60 p-3">
+        <div class="flex flex-wrap items-center gap-2">
+          <button type="button" class="btn-ghost px-3" data-bulk-action="all">全选</button>
+          <button type="button" class="btn-ghost px-3" data-bulk-action="none">全不选</button>
+          <button type="button" class="btn-ghost px-3" data-bulk-action="invert">反选</button>
+        </div>
+        <div class="flex flex-wrap items-center gap-3">
+          <p class="text-xs text-slate-500">已选 <span data-bulk-count>0</span> 项</p>
+          <button type="submit" class="btn-ghost text-red-500 hover:text-red-600" data-bulk-submit disabled>批量删除</button>
+        </div>
+      </div>
+
+      {% if items %}
+        <div class="overflow-x-auto rounded-lg border border-slate-200">
+          <table class="w-full min-w-[1220px] text-left text-sm">
+            <thead class="bg-slate-50 text-slate-600">
+              <tr>
+                <th class="w-12 px-4 py-3 text-center font-medium">
+                  <input type="checkbox" class="h-4 w-4" data-bulk-master aria-label="全选本页" />
+                </th>
+                <th class="px-4 py-3 font-medium">时间</th>
+                <th class="px-4 py-3 font-medium">操作</th>
+                <th class="px-4 py-3 font-medium">模块</th>
+                <th class="px-4 py-3 font-medium">对象</th>
+                <th class="px-4 py-3 font-medium">操作者</th>
+                <th class="px-4 py-3 font-medium">来源</th>
+                <th class="px-4 py-3 font-medium">明细</th>
+                <th class="px-4 py-3 text-right font-medium">操作</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for item in items %}
+                <tr class="border-t border-slate-100">
+                  <td class="px-4 py-3 text-center">
+                    <input type="checkbox" class="h-4 w-4" name="selected_ids" value="{{ item.id }}" data-bulk-item />
+                  </td>
+                  <td class="px-4 py-3 text-slate-500">{{ item.created_at | fmt_dt }}</td>
+                  <td class="px-4 py-3">
+                    {% if item.action == "create" %}
+                      <span class="tag-compact" style="border-color: #2f855a; color: #2f855a;">{{ action_labels.get(item.action, item.action) }}</span>
+                    {% elif item.action == "update" %}
+                      <span class="tag-compact" style="border-color: #3182ce; color: #3182ce;">{{ action_labels.get(item.action, item.action) }}</span>
+                    {% elif item.action == "delete" %}
+                      <span class="tag-compact" style="border-color: #c53030; color: #c53030;">{{ action_labels.get(item.action, item.action) }}</span>
+                    {% else %}
+                      <span class="tag-compact" style="border-color: #718096; color: #718096;">{{ action_labels.get(item.action, item.action) }}</span>
+                    {% endif %}
+                  </td>
+                  <td class="px-4 py-3 text-slate-600">{{ module_labels.get(item.module, item.module) }}</td>
+                  <td class="px-4 py-3">
+                    <div class="font-medium text-slate-900">{{ item.target or "-" }}</div>
+                    <div class="text-xs text-slate-500">{{ item.target_id or "" }}</div>
+                  </td>
+                  <td class="px-4 py-3 text-slate-600">{{ item.operator or "system" }}</td>
+                  <td class="px-4 py-3 text-xs text-slate-500">
+                    <div>{{ item.ip or "-" }}</div>
+                    <div class="mt-1">{{ item.method }} {{ item.path }}</div>
+                  </td>
+                  <td class="px-4 py-3 text-slate-600">{{ item.detail or "-" }}</td>
+                  <td class="px-4 py-3 text-right">
+                    <button
+                      type="button"
+                      class="btn-link text-red-500 hover:text-red-600"
+                      hx-delete="/admin/logs/{{ item.id }}"
+                      hx-target="#logs-table"
+                      hx-swap="outerHTML"
+                      hx-confirm="确认删除该日志吗？"
+                      hx-indicator="#global-indicator"
+                      hx-vals='{{ {"search_q": filters.search_q, "search_action": filters.search_action, "search_module": filters.search_module, "search_sort": filters.search_sort, "page": pagination.page}|tojson }}'
+                    >
+                      删除
+                    </button>
+                  </td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      {% else %}
+        <div class="rounded-lg border border-dashed border-slate-200 bg-slate-50/70 p-10 text-center">
+          <p class="text-lg font-semibold text-slate-800">暂无日志记录</p>
+          <p class="mt-2 text-sm text-slate-500">可在系统配置中开启需要记录的操作类型。</p>
+        </div>
+      {% endif %}
+    </form>
   {% else %}
-    <div class="mt-4 rounded-lg border border-dashed border-slate-200 bg-slate-50/70 p-10 text-center">
-      <p class="text-lg font-semibold text-slate-800">暂无日志记录</p>
-      <p class="mt-2 text-sm text-slate-500">可在系统配置中开启需要记录的操作类型。</p>
-    </div>
+    {% if items %}
+      <div class="mt-4 overflow-x-auto rounded-lg border border-slate-200">
+        <table class="w-full min-w-[1150px] text-left text-sm">
+          <thead class="bg-slate-50 text-slate-600">
+            <tr>
+              <th class="px-4 py-3 font-medium">时间</th>
+              <th class="px-4 py-3 font-medium">操作</th>
+              <th class="px-4 py-3 font-medium">模块</th>
+              <th class="px-4 py-3 font-medium">对象</th>
+              <th class="px-4 py-3 font-medium">操作者</th>
+              <th class="px-4 py-3 font-medium">来源</th>
+              <th class="px-4 py-3 font-medium">明细</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for item in items %}
+              <tr class="border-t border-slate-100">
+                <td class="px-4 py-3 text-slate-500">{{ item.created_at | fmt_dt }}</td>
+                <td class="px-4 py-3">
+                  {% if item.action == "create" %}
+                    <span class="tag-compact" style="border-color: #2f855a; color: #2f855a;">{{ action_labels.get(item.action, item.action) }}</span>
+                  {% elif item.action == "update" %}
+                    <span class="tag-compact" style="border-color: #3182ce; color: #3182ce;">{{ action_labels.get(item.action, item.action) }}</span>
+                  {% elif item.action == "delete" %}
+                    <span class="tag-compact" style="border-color: #c53030; color: #c53030;">{{ action_labels.get(item.action, item.action) }}</span>
+                  {% else %}
+                    <span class="tag-compact" style="border-color: #718096; color: #718096;">{{ action_labels.get(item.action, item.action) }}</span>
+                  {% endif %}
+                </td>
+                <td class="px-4 py-3 text-slate-600">{{ module_labels.get(item.module, item.module) }}</td>
+                <td class="px-4 py-3">
+                  <div class="font-medium text-slate-900">{{ item.target or "-" }}</div>
+                  <div class="text-xs text-slate-500">{{ item.target_id or "" }}</div>
+                </td>
+                <td class="px-4 py-3 text-slate-600">{{ item.operator or "system" }}</td>
+                <td class="px-4 py-3 text-xs text-slate-500">
+                  <div>{{ item.ip or "-" }}</div>
+                  <div class="mt-1">{{ item.method }} {{ item.path }}</div>
+                </td>
+                <td class="px-4 py-3 text-slate-600">{{ item.detail or "-" }}</td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    {% else %}
+      <div class="mt-4 rounded-lg border border-dashed border-slate-200 bg-slate-50/70 p-10 text-center">
+        <p class="text-lg font-semibold text-slate-800">暂无日志记录</p>
+        <p class="mt-2 text-sm text-slate-500">可在系统配置中开启需要记录的操作类型。</p>
+      </div>
+    {% endif %}
   {% endif %}
 
   <div class="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-slate-100 pt-4">

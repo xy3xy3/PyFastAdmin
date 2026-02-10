@@ -670,6 +670,76 @@ async def role_update(
     return response
 
 
+@router.post("/rbac/roles/bulk-delete", response_class=HTMLResponse)
+@permission_decorator.permission_meta("rbac", "delete")
+async def role_bulk_delete(request: Request) -> HTMLResponse:
+    """批量删除角色。"""
+
+    request_values = await read_request_values(request)
+    filters, page = parse_role_filters(request_values)
+    form_data = await request.form()
+    selected_slugs = [str(item).strip() for item in form_data.getlist("selected_slugs") if str(item).strip()]
+    selected_slugs = list(dict.fromkeys(selected_slugs))
+
+    deleted_count = 0
+    skipped_system = 0
+    skipped_in_use = 0
+    skipped_missing = 0
+
+    for slug in selected_slugs:
+        role = await role_service.get_role_by_slug(slug)
+        if not role:
+            skipped_missing += 1
+            continue
+        if role_service.is_system_role(role.slug):
+            skipped_system += 1
+            continue
+        if await role_service.role_in_use(role.slug):
+            skipped_in_use += 1
+            continue
+
+        await role_service.delete_role(role)
+        deleted_count += 1
+        await log_service.record_request(
+            request,
+            action="delete",
+            module="rbac",
+            target=f"角色: {role.name}",
+            target_id=role.slug,
+            detail=f"批量删除角色 {role.slug}",
+        )
+
+    context = await build_role_table_context(request, filters, page)
+    response = templates.TemplateResponse("partials/role_table.html", context)
+    response.headers["HX-Retarget"] = "#role-table"
+    response.headers["HX-Reswap"] = "outerHTML"
+
+    if deleted_count == 0:
+        toast_message = "未删除任何角色，请先勾选记录"
+    else:
+        extras: list[str] = []
+        if skipped_system:
+            extras.append(f"系统角色 {skipped_system} 条")
+        if skipped_in_use:
+            extras.append(f"在用角色 {skipped_in_use} 条")
+        if skipped_missing:
+            extras.append(f"无效记录 {skipped_missing} 条")
+        suffix = f"（跳过{'，'.join(extras)}）" if extras else ""
+        toast_message = f"已删除 {deleted_count} 个角色{suffix}"
+
+    response.headers["HX-Trigger"] = json.dumps(
+        {
+            "rbac-toast": {
+                "title": "批量删除完成",
+                "message": toast_message,
+                "variant": "warning",
+            }
+        },
+        ensure_ascii=True,
+    )
+    return response
+
+
 @router.delete("/rbac/roles/{slug}", response_class=HTMLResponse)
 @permission_decorator.permission_meta("rbac", "delete")
 async def role_delete(request: Request, slug: str) -> HTMLResponse:

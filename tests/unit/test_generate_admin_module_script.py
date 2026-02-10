@@ -62,6 +62,19 @@ def test_render_form_partial_uses_fixed_header_footer_layout(scaffold_module) ->
 
 
 @pytest.mark.unit
+def test_render_table_includes_bulk_delete_controls(scaffold_module) -> None:
+    """脚手架表格应包含全选/反选和批量删除能力。"""
+
+    rendered = scaffold_module.render_table("demo_inventory", "示例模块")
+
+    assert 'data-bulk-scope' in rendered
+    assert 'data-bulk-action="all"' in rendered
+    assert 'data-bulk-action="invert"' in rendered
+    assert 'data-bulk-submit' in rendered
+    assert 'hx-post="/admin/demo_inventory/bulk-delete"' in rendered
+
+
+@pytest.mark.unit
 def test_render_controller_has_htmx_modal_error_strategy(scaffold_module) -> None:
     """脚手架控制器应内置 HTMX 弹窗错误回显策略。"""
 
@@ -71,3 +84,4 @@ def test_render_controller_has_htmx_modal_error_strategy(scaffold_module) -> Non
     assert "error_status = 200 if _is_htmx_request(request) else 422" in rendered
     assert "HX-Retarget" in rendered
     assert "HX-Reswap" in rendered
+    assert '@router.post("/demo_inventory/bulk-delete", response_class=HTMLResponse)' in rendered

@@ -70,6 +70,58 @@
     });
   });
 
+  const bulkScopeSelector = "[data-bulk-scope]";
+  const bulkItemSelector = 'input[type="checkbox"][data-bulk-item]';
+
+  const getBulkItems = (scope) =>
+    Array.from(scope.querySelectorAll(bulkItemSelector)).filter(
+      (item) => item instanceof HTMLInputElement && !item.disabled
+    );
+
+  const syncBulkSelection = (scope) => {
+    if (!(scope instanceof Element)) return;
+
+    const items = getBulkItems(scope);
+    const checkedCount = items.filter((item) => item.checked).length;
+    const master = scope.querySelector('input[type="checkbox"][data-bulk-master]');
+
+    if (master instanceof HTMLInputElement) {
+      if (!items.length) {
+        master.checked = false;
+        master.indeterminate = false;
+      } else if (checkedCount === 0) {
+        master.checked = false;
+        master.indeterminate = false;
+      } else if (checkedCount === items.length) {
+        master.checked = true;
+        master.indeterminate = false;
+      } else {
+        master.checked = false;
+        master.indeterminate = true;
+      }
+    }
+
+    scope.querySelectorAll("[data-bulk-count]").forEach((node) => {
+      node.textContent = String(checkedCount);
+    });
+
+    scope.querySelectorAll("[data-bulk-submit]").forEach((node) => {
+      if (!(node instanceof HTMLButtonElement)) return;
+      const disabled = checkedCount === 0;
+      node.disabled = disabled;
+      node.classList.toggle("opacity-50", disabled);
+      node.classList.toggle("pointer-events-none", disabled);
+    });
+  };
+
+  const syncAllBulkScopes = (root) => {
+    if (!(root instanceof Element)) return;
+    if (root.matches(bulkScopeSelector)) {
+      syncBulkSelection(root);
+    }
+    root.querySelectorAll(bulkScopeSelector).forEach(syncBulkSelection);
+  };
+
   const actionSelector = 'input[type="checkbox"][name^="perm_"]';
   const readAction = "read";
 
@@ -146,6 +198,31 @@
     (node instanceof Element && node.closest("[data-perm-scope]")) || document;
 
   document.addEventListener("click", (event) => {
+    const bulkActionButton = event.target.closest("[data-bulk-action]");
+    if (bulkActionButton) {
+      const scope = bulkActionButton.closest(bulkScopeSelector);
+      if (!scope) return;
+      const items = getBulkItems(scope);
+      if (!items.length) return;
+
+      const action = bulkActionButton.getAttribute("data-bulk-action");
+      if (action === "all") {
+        items.forEach((item) => {
+          item.checked = true;
+        });
+      } else if (action === "none") {
+        items.forEach((item) => {
+          item.checked = false;
+        });
+      } else if (action === "invert") {
+        items.forEach((item) => {
+          item.checked = !item.checked;
+        });
+      }
+      syncBulkSelection(scope);
+      return;
+    }
+
     const button = event.target.closest("[data-perm-action]");
     if (!button) return;
     const scope = findScope(button);
@@ -174,6 +251,25 @@
   document.addEventListener("change", (event) => {
     const target = event.target;
     if (!(target instanceof HTMLInputElement)) return;
+
+    if (target.matches("[data-bulk-master]")) {
+      const scope = target.closest(bulkScopeSelector);
+      if (!scope) return;
+      getBulkItems(scope).forEach((item) => {
+        item.checked = target.checked;
+      });
+      syncBulkSelection(scope);
+      return;
+    }
+
+    if (target.matches(bulkItemSelector)) {
+      const scope = target.closest(bulkScopeSelector);
+      if (scope) {
+        syncBulkSelection(scope);
+      }
+      return;
+    }
+
     if (target.matches("[data-perm-row-toggle]")) {
       const row = target.closest("[data-perm-row]");
       if (!row) return;
@@ -223,17 +319,20 @@
     if (target instanceof Element) {
       syncReadDependency(target);
       syncPermToggles(target);
+      syncAllBulkScopes(target);
     }
+  };
+
+  const bootstrapSync = () => {
+    syncReadDependency(document);
+    syncPermToggles(document);
+    syncAllBulkScopes(document);
   };
 
   document.body.addEventListener("htmx:afterSwap", syncAfterSwap);
   if (document.readyState === "loading") {
-    document.addEventListener("DOMContentLoaded", () => {
-      syncReadDependency(document);
-      syncPermToggles(document);
-    });
+    document.addEventListener("DOMContentLoaded", bootstrapSync);
   } else {
-    syncReadDependency(document);
-    syncPermToggles(document);
+    bootstrapSync();
   }
 })();

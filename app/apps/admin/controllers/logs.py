@@ -2,15 +2,16 @@
 
 from __future__ import annotations
 
+import json
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Mapping
 
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
 
-from app.services import config_service, log_service
+from app.services import config_service, log_service, permission_decorator
 
 BASE_DIR = Path(__file__).resolve().parents[1]
 TEMPLATES_DIR = BASE_DIR / "templates"
@@ -107,6 +108,24 @@ def build_pagination(total: int, page: int, page_size: int) -> dict[str, Any]:
     }
 
 
+async def read_request_values(request: Request) -> dict[str, str]:
+    """统一读取 Query + Form 参数，兼容 HTMX 请求。"""
+
+    values: dict[str, str] = {key: value for key, value in request.query_params.items()}
+    if request.method == "GET":
+        return values
+
+    content_type = request.headers.get("content-type", "")
+    if "application/x-www-form-urlencoded" not in content_type and "multipart/form-data" not in content_type:
+        return values
+
+    form_data = await request.form()
+    for key, value in form_data.items():
+        if isinstance(value, str):
+            values[key] = value
+    return values
+
+
 async def build_log_table_context(
     request: Request,
     filters: dict[str, str],
@@ -147,3 +166,97 @@ async def logs_table(request: Request) -> HTMLResponse:
     filters, page = parse_log_filters(request.query_params)
     context = await build_log_table_context(request, filters, page)
     return templates.TemplateResponse("partials/logs_table.html", context)
+
+
+@router.delete("/logs/{log_id}", response_class=HTMLResponse)
+@permission_decorator.permission_meta("operation_logs", "delete")
+async def logs_delete(request: Request, log_id: str) -> HTMLResponse:
+    """删除单条操作日志。"""
+
+    request_values = await read_request_values(request)
+    filters, page = parse_log_filters(request_values)
+
+    item = await log_service.get_log(log_id)
+    if not item:
+        raise HTTPException(status_code=404, detail="日志不存在")
+
+    await log_service.delete_log(item)
+    await log_service.record_request(
+        request,
+        action="delete",
+        module="logs",
+        target="操作日志",
+        target_id=log_id,
+        detail=f"删除日志 {log_id}",
+    )
+
+    context = await build_log_table_context(request, filters, page)
+    response = templates.TemplateResponse("partials/logs_table.html", context)
+    response.headers["HX-Retarget"] = "#logs-table"
+    response.headers["HX-Reswap"] = "outerHTML"
+    response.headers["HX-Trigger"] = json.dumps(
+        {
+            "rbac-toast": {
+                "title": "已删除",
+                "message": "日志记录已删除",
+                "variant": "warning",
+            }
+        },
+        ensure_ascii=True,
+    )
+    return response
+
+
+@router.post("/logs/bulk-delete", response_class=HTMLResponse)
+@permission_decorator.permission_meta("operation_logs", "delete")
+async def logs_bulk_delete(request: Request) -> HTMLResponse:
+    """批量删除操作日志。"""
+
+    request_values = await read_request_values(request)
+    filters, page = parse_log_filters(request_values)
+    form_data = await request.form()
+    selected_ids = [str(item).strip() for item in form_data.getlist("selected_ids") if str(item).strip()]
+    selected_ids = list(dict.fromkeys(selected_ids))
+
+    deleted_count = 0
+    skipped_count = 0
+    for log_id in selected_ids:
+        item = await log_service.get_log(log_id)
+        if not item:
+            skipped_count += 1
+            continue
+        await log_service.delete_log(item)
+        deleted_count += 1
+
+    if deleted_count > 0:
+        await log_service.record_request(
+            request,
+            action="delete",
+            module="logs",
+            target="操作日志",
+            detail=f"批量删除日志 {deleted_count} 条",
+        )
+
+    context = await build_log_table_context(request, filters, page)
+    response = templates.TemplateResponse("partials/logs_table.html", context)
+    response.headers["HX-Retarget"] = "#logs-table"
+    response.headers["HX-Reswap"] = "outerHTML"
+
+    if deleted_count == 0:
+        toast_message = "未删除任何日志，请先勾选记录"
+    elif skipped_count > 0:
+        toast_message = f"已删除 {deleted_count} 条，跳过 {skipped_count} 条"
+    else:
+        toast_message = f"已批量删除 {deleted_count} 条日志"
+
+    response.headers["HX-Trigger"] = json.dumps(
+        {
+            "rbac-toast": {
+                "title": "批量删除完成",
+                "message": toast_message,
+                "variant": "warning",
+            }
+        },
+        ensure_ascii=True,
+    )
+    return response

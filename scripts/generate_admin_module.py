@@ -332,6 +332,53 @@ async def {module}_update(request: Request, item_id: str) -> HTMLResponse:
     return response
 
 
+@router.post("/{module}/bulk-delete", response_class=HTMLResponse)
+@permission_decorator.permission_meta("{module}", "delete")
+async def {module}_bulk_delete(request: Request) -> HTMLResponse:
+    """批量删除数据。"""
+
+    form_data = await request.form()
+    selected_ids = [str(item).strip() for item in form_data.getlist("selected_ids") if str(item).strip()]
+    selected_ids = list(dict.fromkeys(selected_ids))
+
+    deleted_count = 0
+    skipped_count = 0
+    for item_id in selected_ids:
+        item = await {module}_service.get_item(item_id)
+        if not item:
+            skipped_count += 1
+            continue
+
+        await {module}_service.delete_item(item)
+        deleted_count += 1
+        await log_service.record_request(
+            request,
+            action="delete",
+            module="{module}",
+            target="{title}",
+            target_id=item_id,
+            detail="批量删除记录",
+        )
+
+    items = await {module}_service.list_items()
+    response = templates.TemplateResponse("partials/{module}_table.html", {{**base_context(request), "items": items}})
+    response.headers["HX-Retarget"] = "#{module}-table"
+    response.headers["HX-Reswap"] = "outerHTML"
+
+    if deleted_count == 0:
+        message = "未删除任何记录，请先勾选数据"
+    elif skipped_count > 0:
+        message = f"已删除 {{deleted_count}} 条，跳过 {{skipped_count}} 条"
+    else:
+        message = f"已批量删除 {{deleted_count}} 条记录"
+
+    response.headers["HX-Trigger"] = json.dumps(
+        {{"rbac-toast": {{"title": "批量删除完成", "message": message, "variant": "warning"}}}},
+        ensure_ascii=True,
+    )
+    return response
+
+
 @router.delete("/{module}/{{item_id}}", response_class=HTMLResponse)
 @permission_decorator.permission_meta("{module}", "delete")
 async def {module}_delete(request: Request, item_id: str) -> HTMLResponse:
@@ -361,7 +408,6 @@ async def {module}_delete(request: Request, item_id: str) -> HTMLResponse:
     )
     return response
 '''
-
 
 def render_model(module: str, class_name: str) -> str:
     """渲染模型模板。"""
@@ -498,7 +544,7 @@ def render_page(module: str, title: str) -> str:
 def render_table(module: str, title: str) -> str:
     """渲染表格 partial 模板。"""
 
-    return f'''<div id="{module}-table" class="card p-5">
+    return f'''<div id="{module}-table" class="card p-5" {{% if request.state.permission_flags.resources.get("{module}", {{"delete": False}})['delete'] %}}data-bulk-scope{{% endif %}}>
   {{% set perm = request.state.permission_flags.resources.get("{module}", {{"create": False, "read": False, "update": False, "delete": False}}) %}}
   {{% set show_action_col = perm['update'] or perm['delete'] %}}
   <div class="flex flex-wrap items-center justify-between gap-3">
@@ -521,60 +567,132 @@ def render_table(module: str, title: str) -> str:
     {{% endif %}}
   </div>
 
-  <div class="mt-4 overflow-x-auto rounded-lg border border-slate-200">
-    <table class="w-full min-w-[720px] text-left text-sm">
-      <thead class="bg-slate-50 text-slate-600">
-        <tr>
-          <th class="px-4 py-3 font-medium">ID</th>
-          <th class="px-4 py-3 font-medium">名称</th>
-          {{% if show_action_col %}}<th class="px-4 py-3 text-right font-medium">操作</th>{{% endif %}}
-        </tr>
-      </thead>
-      <tbody>
-        {{% for item in items %}}
-          <tr class="border-t border-slate-100">
-            <td class="px-4 py-3 text-slate-500">{{{{ item.id if item.id is defined else '-' }}}}</td>
-            <td class="px-4 py-3 text-slate-900">{{{{ item.name if item.name is defined else '-' }}}}</td>
-            {{% if show_action_col %}}
-              <td class="px-4 py-3 text-right">
-                {{% if perm['update'] %}}
-                  <button
-                    class="btn-link"
-                    hx-get="/admin/{module}/{{{{ item.id }}}}/edit"
-                    hx-target="#modal-body"
-                    hx-swap="innerHTML"
-                    hx-indicator="#global-indicator"
-                    x-on:click="modalOpen = true"
-                  >
-                    编辑
-                  </button>
+  {{% if perm['delete'] %}}
+    <form
+      class="mt-4 space-y-4"
+      hx-post="/admin/{module}/bulk-delete"
+      hx-target="#{module}-table"
+      hx-swap="outerHTML"
+      hx-indicator="#global-indicator"
+      hx-confirm="确认批量删除已勾选的记录吗？"
+    >
+      <input type="hidden" name="csrf_token" value="{{{{ request.state.csrf_token or '' }}}}" />
+
+      <div class="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-slate-200 bg-slate-50/60 p-3">
+        <div class="flex flex-wrap items-center gap-2">
+          <button type="button" class="btn-ghost px-3" data-bulk-action="all">全选</button>
+          <button type="button" class="btn-ghost px-3" data-bulk-action="none">全不选</button>
+          <button type="button" class="btn-ghost px-3" data-bulk-action="invert">反选</button>
+        </div>
+        <div class="flex flex-wrap items-center gap-3">
+          <p class="text-xs text-slate-500">已选 <span data-bulk-count>0</span> 项</p>
+          <button type="submit" class="btn-ghost text-red-500 hover:text-red-600" data-bulk-submit disabled>批量删除</button>
+        </div>
+      </div>
+
+      <div class="overflow-x-auto rounded-lg border border-slate-200">
+        <table class="w-full min-w-[780px] text-left text-sm">
+          <thead class="bg-slate-50 text-slate-600">
+            <tr>
+              <th class="w-12 px-4 py-3 text-center font-medium">
+                <input type="checkbox" class="h-4 w-4" data-bulk-master aria-label="全选本页" />
+              </th>
+              <th class="px-4 py-3 font-medium">ID</th>
+              <th class="px-4 py-3 font-medium">名称</th>
+              {{% if show_action_col %}}<th class="px-4 py-3 text-right font-medium">操作</th>{{% endif %}}
+            </tr>
+          </thead>
+          <tbody>
+            {{% for item in items %}}
+              <tr class="border-t border-slate-100">
+                <td class="px-4 py-3 text-center">
+                  <input type="checkbox" class="h-4 w-4" name="selected_ids" value="{{{{ item.id }}}}" data-bulk-item />
+                </td>
+                <td class="px-4 py-3 text-slate-500">{{{{ item.id if item.id is defined else '-' }}}}</td>
+                <td class="px-4 py-3 text-slate-900">{{{{ item.name if item.name is defined else '-' }}}}</td>
+                {{% if show_action_col %}}
+                  <td class="px-4 py-3 text-right">
+                    {{% if perm['update'] %}}
+                      <button
+                        type="button"
+                        class="btn-link"
+                        hx-get="/admin/{module}/{{{{ item.id }}}}/edit"
+                        hx-target="#modal-body"
+                        hx-swap="innerHTML"
+                        hx-indicator="#global-indicator"
+                        x-on:click="modalOpen = true"
+                      >
+                        编辑
+                      </button>
+                    {{% endif %}}
+                    {{% if perm['delete'] %}}
+                      <button
+                        type="button"
+                        class="btn-link {{% if perm['update'] %}}ml-3 {{% endif %}}text-red-500 hover:text-red-600"
+                        hx-delete="/admin/{module}/{{{{ item.id }}}}"
+                        hx-target="#{module}-table"
+                        hx-swap="outerHTML"
+                        hx-confirm="确认删除该记录吗？"
+                        hx-indicator="#global-indicator"
+                      >
+                        删除
+                      </button>
+                    {{% endif %}}
+                  </td>
                 {{% endif %}}
-                {{% if perm['delete'] %}}
-                  <button
-                    class="btn-link {{% if perm['update'] %}}ml-3 {{% endif %}}text-red-500 hover:text-red-600"
-                    hx-delete="/admin/{module}/{{{{ item.id }}}}"
-                    hx-target="#{module}-table"
-                    hx-swap="outerHTML"
-                    hx-confirm="确认删除该记录吗？"
-                    hx-indicator="#global-indicator"
-                  >
-                    删除
-                  </button>
-                {{% endif %}}
-              </td>
-            {{% endif %}}
-          </tr>
-        {{% else %}}
+              </tr>
+            {{% else %}}
+              <tr>
+                <td class="px-4 py-8 text-center text-sm text-slate-500" colspan="4">暂无数据，请先创建记录。</td>
+              </tr>
+            {{% endfor %}}
+          </tbody>
+        </table>
+      </div>
+    </form>
+  {{% else %}}
+    <div class="mt-4 overflow-x-auto rounded-lg border border-slate-200">
+      <table class="w-full min-w-[720px] text-left text-sm">
+        <thead class="bg-slate-50 text-slate-600">
           <tr>
-            <td class="px-4 py-8 text-center text-sm text-slate-500" colspan="3">暂无数据，请先创建记录。</td>
+            <th class="px-4 py-3 font-medium">ID</th>
+            <th class="px-4 py-3 font-medium">名称</th>
+            {{% if show_action_col %}}<th class="px-4 py-3 text-right font-medium">操作</th>{{% endif %}}
           </tr>
-        {{% endfor %}}
-      </tbody>
-    </table>
-  </div>
+        </thead>
+        <tbody>
+          {{% for item in items %}}
+            <tr class="border-t border-slate-100">
+              <td class="px-4 py-3 text-slate-500">{{{{ item.id if item.id is defined else '-' }}}}</td>
+              <td class="px-4 py-3 text-slate-900">{{{{ item.name if item.name is defined else '-' }}}}</td>
+              {{% if show_action_col %}}
+                <td class="px-4 py-3 text-right">
+                  {{% if perm['update'] %}}
+                    <button
+                      class="btn-link"
+                      hx-get="/admin/{module}/{{{{ item.id }}}}/edit"
+                      hx-target="#modal-body"
+                      hx-swap="innerHTML"
+                      hx-indicator="#global-indicator"
+                      x-on:click="modalOpen = true"
+                    >
+                      编辑
+                    </button>
+                  {{% endif %}}
+                </td>
+              {{% endif %}}
+            </tr>
+          {{% else %}}
+            <tr>
+              <td class="px-4 py-8 text-center text-sm text-slate-500" colspan="3">暂无数据，请先创建记录。</td>
+            </tr>
+          {{% endfor %}}
+        </tbody>
+      </table>
+    </div>
+  {{% endif %}}
 </div>
 '''
-
 
 def render_form_partial(module: str, title: str) -> str:
     """渲染表单 partial 模板。"""

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from beanie import PydanticObjectId
 from fastapi import Request
 
 from app.models import OperationLog
@@ -125,3 +126,19 @@ async def list_logs(filters: dict[str, str], page: int, page_size: int) -> tuple
     skip = max((safe_page - 1) * page_size, 0)
     items = await OperationLog.find(query).sort(sort_field).skip(skip).limit(page_size).to_list()
     return items, total
+
+
+async def get_log(log_id: str) -> OperationLog | None:
+    """按 ID 查询单条日志。"""
+
+    try:
+        object_id = PydanticObjectId(log_id)
+    except Exception:
+        return None
+    return await OperationLog.get(object_id)
+
+
+async def delete_log(log: OperationLog) -> None:
+    """删除单条日志。"""
+
+    await log.delete()

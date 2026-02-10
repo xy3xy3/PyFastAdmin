@@ -73,7 +73,7 @@ BASE_ADMIN_TREE = [
                 "key": "operation_logs",
                 "name": "操作日志",
                 "url": "/admin/logs",
-                "actions": ["read"],
+                "actions": ["read", "delete"],
             },
             {
                 "key": "backup",

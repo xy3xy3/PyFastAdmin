@@ -579,8 +579,8 @@ def render_table(module: str, title: str) -> str:
 def render_form_partial(module: str, title: str) -> str:
     """渲染表单 partial 模板。"""
 
-    return f'''<div class="space-y-4">
-  <div class="flex items-start justify-between gap-4">
+    return f'''<div class="flex flex-col" style="max-height: calc(100vh - 9rem);">
+  <div class="flex items-start justify-between gap-4 border-b border-slate-100 pb-3">
     <div>
       <h2 class="font-display text-2xl text-ink">{{% if mode == "edit" %}}编辑{title}{{% else %}}新建{title}{{% endif %}}</h2>
       <p class="text-sm text-muted">脚手架模板：请补充表单字段与业务校验。</p>
@@ -588,41 +588,52 @@ def render_form_partial(module: str, title: str) -> str:
     <button class="btn-ghost px-3" x-on:click="modalOpen = false">关闭</button>
   </div>
 
-  {{% if errors %}}
-    <div class="rounded-2xl border border-black/10 bg-white/70 p-3 text-sm text-red-600">
-      <p class="font-semibold">请修正以下问题：</p>
-      <ul class="mt-2 list-disc pl-5">
-        {{% for err in errors %}}
-          <li>{{{{ err }}}}</li>
-        {{% endfor %}}
-      </ul>
-    </div>
-  {{% endif %}}
-
-  <form class="grid gap-4" hx-post="{{{{ action }}}}" hx-target="#modal-body" hx-swap="innerHTML" hx-indicator="#modal-indicator">
+  <form
+    class="mt-4 flex flex-col"
+    style="min-height: 0; flex: 1;"
+    hx-post="{{{{ action }}}}"
+    hx-target="#modal-body"
+    hx-swap="innerHTML"
+    hx-indicator="#modal-indicator"
+  >
     <input type="hidden" name="csrf_token" value="{{{{ request.state.csrf_token or '' }}}}" />
 
-    <div>
-      <label class="label">名称</label>
-      <input name="name" class="input" value="{{{{ form.name if form.name is defined else '' }}}}" />
+    <div class="space-y-4 overflow-y-auto pr-1" style="min-height: 0; flex: 1;">
+      {{% if errors %}}
+        <div class="rounded-2xl border border-black/10 bg-white/70 p-3 text-sm text-red-600">
+          <p class="font-semibold">请修正以下问题：</p>
+          <ul class="mt-2 list-disc pl-5">
+            {{% for err in errors %}}
+              <li>{{{{ err }}}}</li>
+            {{% endfor %}}
+          </ul>
+        </div>
+      {{% endif %}}
+
+      <div>
+        <label class="label">名称</label>
+        <input name="name" class="input" value="{{{{ form.name if form.name is defined else '' }}}}" />
+      </div>
+
+      <div>
+        <label class="label">描述</label>
+        <input name="description" class="input" value="{{{{ form.description if form.description is defined else '' }}}}" />
+      </div>
+
+      <div>
+        <label class="label">状态</label>
+        <select name="status" class="input">
+          <option value="enabled" {{% if form.status is not defined or form.status == "enabled" %}}selected{{% endif %}}>启用</option>
+          <option value="disabled" {{% if form.status is defined and form.status == "disabled" %}}selected{{% endif %}}>禁用</option>
+        </select>
+      </div>
     </div>
 
-    <div>
-      <label class="label">描述</label>
-      <input name="description" class="input" value="{{{{ form.description if form.description is defined else '' }}}}" />
-    </div>
-
-    <div>
-      <label class="label">状态</label>
-      <select name="status" class="input">
-        <option value="enabled" {{% if form.status is not defined or form.status == "enabled" %}}selected{{% endif %}}>启用</option>
-        <option value="disabled" {{% if form.status is defined and form.status == "disabled" %}}selected{{% endif %}}>禁用</option>
-      </select>
-    </div>
-
-    <div class="flex flex-wrap items-center justify-end gap-3 pt-2">
-      <button type="button" class="btn-ghost" x-on:click="modalOpen = false">取消</button>
-      <button type="submit" class="btn-primary">保存</button>
+    <div class="mt-4 border-t border-slate-100 pt-3">
+      <div class="flex flex-wrap items-center justify-end gap-3">
+        <button type="button" class="btn-ghost" x-on:click="modalOpen = false">取消</button>
+        <button type="submit" class="btn-primary">保存</button>
+      </div>
     </div>
   </form>
 </div>

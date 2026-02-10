@@ -18,6 +18,8 @@ dependencies = [
   "passlib>=1.7.4",
   "python-multipart>=0.0.9",
   "itsdangerous>=2.2.0",
+  "alibabacloud-oss-v2>=1.2.4",
+  "cos-python-sdk-v5>=1.9.41",
 ]
 
 [project.urls]

@@ -9,14 +9,16 @@
 
     <div class="flex items-center gap-2">
       <button
-        class="btn-ghost"
+        class="btn-ghost px-3"
         hx-get="/admin/users/table"
         hx-target="#admin-table"
         hx-swap="outerHTML"
         hx-indicator="#global-indicator"
         hx-vals='{{ {"search_q": filters.search_q, "search_role": filters.search_role, "search_status": filters.search_status, "search_sort": filters.search_sort, "page": pagination.page}|tojson }}'
+        title="刷新"
+        aria-label="刷新"
       >
-        刷新
+        <i class="fa-solid fa-rotate-right" aria-hidden="true"></i>
       </button>
       {% if admin_perm['create'] %}
         <button
@@ -36,7 +38,7 @@
 
   {% if admin_perm['delete'] %}
     <form
-      class="mt-4 space-y-4"
+      class="mt-4 space-y-4 pb-20"
       hx-post="/admin/users/bulk-delete"
       hx-target="#admin-table"
       hx-swap="outerHTML"
@@ -51,15 +53,8 @@
       <input type="hidden" name="page" value="{{ pagination.page }}" />
 
       <div class="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-slate-200 bg-slate-50/60 p-3">
-        <div class="flex flex-wrap items-center gap-2">
-          <button type="button" class="btn-ghost px-3" data-bulk-action="all">全选</button>
-          <button type="button" class="btn-ghost px-3" data-bulk-action="none">全不选</button>
-          <button type="button" class="btn-ghost px-3" data-bulk-action="invert">反选</button>
-        </div>
-        <div class="flex flex-wrap items-center gap-3">
-          <p class="text-xs text-slate-500">已选 <span data-bulk-count>0</span> 项</p>
-          <button type="submit" class="btn-ghost text-red-500 hover:text-red-600" data-bulk-submit disabled>批量删除</button>
-        </div>
+        <p class="text-xs text-slate-500">已选 <span data-bulk-count>0</span> 项</p>
+        <button type="button" class="btn-ghost px-3" data-bulk-action="invert">反选</button>
       </div>
 
       {% if items %}
@@ -152,6 +147,23 @@
           <p class="mt-2 text-sm text-slate-500">点击右上角“新建管理员”创建第一个账号。</p>
         </div>
       {% endif %}
+
+      <div
+        class="bulk-fixed-layer fixed bottom-0 z-20 hidden h-16 bg-slate-900/10 backdrop-blur-[2px]"
+        data-bulk-overlay
+        aria-hidden="true"
+      ></div>
+      <div
+        class="bulk-fixed-layer fixed bottom-0 z-30 hidden border-t border-slate-200/80 bg-white/65 shadow-[0_-8px_20px_rgba(15,23,42,0.12)] backdrop-blur-md"
+        data-bulk-bottom
+      >
+        <div class="mx-auto flex w-full max-w-[1440px] items-center justify-between gap-3 px-4 py-3">
+          <p class="text-sm text-slate-700">已选择 <strong data-bulk-count>0</strong> 项</p>
+          <button type="submit" class="btn-ghost text-red-500 hover:text-red-600" data-bulk-submit disabled>
+            批量删除
+          </button>
+        </div>
+      </div>
     </form>
   {% else %}
     {% if items %}

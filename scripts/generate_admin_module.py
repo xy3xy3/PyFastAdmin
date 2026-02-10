@@ -553,23 +553,36 @@ def render_table(module: str, title: str) -> str:
       <p class="mt-1 text-sm text-slate-500">共 {{{{ items | length }}}} 条记录</p>
     </div>
 
-    {{% if perm['create'] %}}
+    <div class="flex items-center gap-2">
       <button
-        class="btn-primary"
-        hx-get="/admin/{module}/new"
-        hx-target="#modal-body"
-        hx-swap="innerHTML"
+        class="btn-ghost px-3"
+        hx-get="/admin/{module}/table"
+        hx-target="#{module}-table"
+        hx-swap="outerHTML"
         hx-indicator="#global-indicator"
-        x-on:click="modalOpen = true"
+        title="刷新"
+        aria-label="刷新"
       >
-        新建
+        <i class="fa-solid fa-rotate-right" aria-hidden="true"></i>
       </button>
-    {{% endif %}}
+      {{% if perm['create'] %}}
+        <button
+          class="btn-primary"
+          hx-get="/admin/{module}/new"
+          hx-target="#modal-body"
+          hx-swap="innerHTML"
+          hx-indicator="#global-indicator"
+          x-on:click="modalOpen = true"
+        >
+          新建
+        </button>
+      {{% endif %}}
+    </div>
   </div>
 
   {{% if perm['delete'] %}}
     <form
-      class="mt-4 space-y-4"
+      class="mt-4 space-y-4 pb-20"
       hx-post="/admin/{module}/bulk-delete"
       hx-target="#{module}-table"
       hx-swap="outerHTML"
@@ -579,15 +592,8 @@ def render_table(module: str, title: str) -> str:
       <input type="hidden" name="csrf_token" value="{{{{ request.state.csrf_token or '' }}}}" />
 
       <div class="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-slate-200 bg-slate-50/60 p-3">
-        <div class="flex flex-wrap items-center gap-2">
-          <button type="button" class="btn-ghost px-3" data-bulk-action="all">全选</button>
-          <button type="button" class="btn-ghost px-3" data-bulk-action="none">全不选</button>
-          <button type="button" class="btn-ghost px-3" data-bulk-action="invert">反选</button>
-        </div>
-        <div class="flex flex-wrap items-center gap-3">
-          <p class="text-xs text-slate-500">已选 <span data-bulk-count>0</span> 项</p>
-          <button type="submit" class="btn-ghost text-red-500 hover:text-red-600" data-bulk-submit disabled>批量删除</button>
-        </div>
+        <p class="text-xs text-slate-500">已选 <span data-bulk-count>0</span> 项</p>
+        <button type="button" class="btn-ghost px-3" data-bulk-action="invert">反选</button>
       </div>
 
       <div class="overflow-x-auto rounded-lg border border-slate-200">
@@ -648,6 +654,23 @@ def render_table(module: str, title: str) -> str:
             {{% endfor %}}
           </tbody>
         </table>
+      </div>
+
+      <div
+        class="bulk-fixed-layer fixed bottom-0 z-20 hidden h-16 bg-slate-900/10 backdrop-blur-[2px]"
+        data-bulk-overlay
+        aria-hidden="true"
+      ></div>
+      <div
+        class="bulk-fixed-layer fixed bottom-0 z-30 hidden border-t border-slate-200/80 bg-white/65 shadow-[0_-8px_20px_rgba(15,23,42,0.12)] backdrop-blur-md"
+        data-bulk-bottom
+      >
+        <div class="mx-auto flex w-full max-w-[1440px] items-center justify-between gap-3 px-4 py-3">
+          <p class="text-sm text-slate-700">已选择 <strong data-bulk-count>0</strong> 项</p>
+          <button type="submit" class="btn-ghost text-red-500 hover:text-red-600" data-bulk-submit disabled>
+            批量删除
+          </button>
+        </div>
       </div>
     </form>
   {{% else %}}

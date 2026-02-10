@@ -112,9 +112,25 @@
       node.classList.toggle("opacity-50", disabled);
       node.classList.toggle("pointer-events-none", disabled);
     });
+
+    const visible = checkedCount > 0;
+
+    scope.querySelectorAll("[data-bulk-bottom]").forEach((node) => {
+      if (!(node instanceof HTMLElement)) return;
+      node.classList.toggle("hidden", !visible);
+    });
+
+    scope.querySelectorAll("[data-bulk-overlay]").forEach((node) => {
+      if (!(node instanceof HTMLElement)) return;
+      node.classList.toggle("hidden", !visible);
+    });
   };
 
   const syncAllBulkScopes = (root) => {
+    if (root instanceof Document) {
+      root.querySelectorAll(bulkScopeSelector).forEach(syncBulkSelection);
+      return;
+    }
     if (!(root instanceof Element)) return;
     if (root.matches(bulkScopeSelector)) {
       syncBulkSelection(root);

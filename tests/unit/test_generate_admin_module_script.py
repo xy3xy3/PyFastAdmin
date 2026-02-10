@@ -68,10 +68,12 @@ def test_render_table_includes_bulk_delete_controls(scaffold_module) -> None:
     rendered = scaffold_module.render_table("demo_inventory", "示例模块")
 
     assert 'data-bulk-scope' in rendered
-    assert 'data-bulk-action="all"' in rendered
     assert 'data-bulk-action="invert"' in rendered
     assert 'data-bulk-submit' in rendered
+    assert 'data-bulk-bottom' in rendered
+    assert 'data-bulk-overlay' in rendered
     assert 'hx-post="/admin/demo_inventory/bulk-delete"' in rendered
+    assert 'fa-rotate-right' in rendered
 
 
 @pytest.mark.unit

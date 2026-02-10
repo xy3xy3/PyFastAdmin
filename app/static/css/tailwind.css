@@ -210,6 +210,21 @@
     @apply min-w-0 p-6;
   }
 
+  .bulk-fixed-layer {
+    left: 0;
+    right: 0;
+  }
+
+  @media (min-width: 768px) {
+    .bulk-fixed-layer {
+      left: 16rem;
+    }
+
+    .admin-shell-collapsed .bulk-fixed-layer {
+      left: 72px;
+    }
+  }
+
   .breadcrumb {
     @apply mt-1 flex items-center gap-2 text-sm;
   }

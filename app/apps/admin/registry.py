@@ -75,6 +75,12 @@ BASE_ADMIN_TREE = [
                 "url": "/admin/logs",
                 "actions": ["read"],
             },
+            {
+                "key": "backup",
+                "name": "数据备份",
+                "url": "/admin/backup",
+                "actions": ["create", "read", "update", "delete"],
+            },
         ],
     },
 ]

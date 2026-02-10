@@ -16,6 +16,7 @@ MODULE_LABELS: dict[str, str] = {
     "admin_users": "管理员管理",
     "config": "系统配置",
     "logs": "操作日志",
+    "backup": "数据备份",
 }
 
 

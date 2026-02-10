@@ -18,6 +18,11 @@ def test_required_permission_route_mapping() -> None:
         "update",
     )
     assert permission_service.required_permission("/admin/rbac/roles/viewer", "DELETE") == ("rbac", "delete")
+    assert permission_service.required_permission("/admin/backup", "GET") == ("backup", "read")
+    assert permission_service.required_permission("/admin/backup/table", "GET") == ("backup", "read")
+    assert permission_service.required_permission("/admin/backup/collections", "GET") == ("backup", "read")
+    assert permission_service.required_permission("/admin/backup/demo", "DELETE") == ("backup", "delete")
+    assert permission_service.required_permission("/admin/backup/demo/restore", "POST") == ("backup", "update")
     assert permission_service.required_permission("/admin/unknown", "GET") is None
 
 
@@ -188,3 +193,6 @@ def test_required_permission_prefers_explicit_route_declaration() -> None:
     assert permission_service.required_permission("/admin/config", "POST") == ("config", "update")
     assert permission_service.required_permission("/admin/rbac/roles/import", "GET") == ("rbac", "update")
     assert permission_service.required_permission("/admin/rbac/roles/import", "POST") == ("rbac", "update")
+    assert permission_service.required_permission("/admin/backup", "POST") == ("backup", "update")
+    assert permission_service.required_permission("/admin/backup/trigger", "POST") == ("backup", "create")
+    assert permission_service.required_permission("/admin/backup/demo/restore", "POST") == ("backup", "update")

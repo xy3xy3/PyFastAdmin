@@ -21,7 +21,7 @@
         "collapsedMenuOpen": "",
         "menuOpen": {
           "security": path.startswith("/admin/rbac") or path.startswith("/admin/users"),
-          "system": path.startswith("/admin/config") or path.startswith("/admin/logs"),
+          "system": path.startswith("/admin/config") or path.startswith("/admin/logs") or path.startswith("/admin/backup"),
           "profile": path.startswith("/admin/profile") or path.startswith("/admin/password"),
         },
       }|tojson }}'
@@ -54,6 +54,9 @@
         {% elif path.startswith('/admin/logs') %}
           {% set crumb_parent = "系统工具" %}
           {% set crumb_title = "操作日志" %}
+        {% elif path.startswith('/admin/backup') %}
+          {% set crumb_parent = "系统工具" %}
+          {% set crumb_title = "数据备份" %}
         {% endif %}
 
         <div class="admin-shell" :class="{ 'admin-shell-collapsed': desktopCollapsed }">
@@ -139,6 +142,12 @@
                         操作日志
                       </a>
                     {% endif %}
+                    {% if perm.backup.read %}
+                      <a class="sider-link {% if path.startswith('/admin/backup') %}sider-link-active{% endif %}" href="/admin/backup" x-on:click="mobileSidebarOpen = false">
+                        <i class="fa-solid fa-database sider-icon"></i>
+                        数据备份
+                      </a>
+                    {% endif %}
                   </div>
                 {% endif %}
 
@@ -204,7 +213,7 @@
                   <div class="compact-item" x-on:mouseenter="collapsedMenuOpen = 'system'" x-on:click.outside="collapsedMenuOpen = ''">
                     <button
                       type="button"
-                      class="compact-trigger {% if path.startswith('/admin/config') or path.startswith('/admin/logs') %}compact-link-active{% endif %}"
+                      class="compact-trigger {% if path.startswith('/admin/config') or path.startswith('/admin/logs') or path.startswith('/admin/backup') %}compact-link-active{% endif %}"
                       title="系统工具"
                       x-on:click="if (collapsedMenuOpen === 'system') { collapsedMenuOpen = '' } else { collapsedMenuOpen = 'system' }"
                     >
@@ -220,6 +229,11 @@
                       {% if perm.operation_logs.read %}
                         <a class="compact-flyout-link {% if path.startswith('/admin/logs') %}compact-flyout-link-active{% endif %}" href="/admin/logs" x-on:click="collapsedMenuOpen = ''">
                           操作日志
+                        </a>
+                      {% endif %}
+                      {% if perm.backup.read %}
+                        <a class="compact-flyout-link {% if path.startswith('/admin/backup') %}compact-flyout-link-active{% endif %}" href="/admin/backup" x-on:click="collapsedMenuOpen = ''">
+                          数据备份
                         </a>
                       {% endif %}
                     </div>

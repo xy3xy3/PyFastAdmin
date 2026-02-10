@@ -112,6 +112,13 @@ docker compose --env-file ../../.env up -d --build
 - `ADMIN_USER`：默认管理员账号
 - `ADMIN_PASS`：默认管理员密码
 
+备份云存储测试变量（用于 E2E/测试直连云端）：
+- `TEST_BACKUP_USE_ENV`：开发环境是否强制启用 `TEST_BACKUP_*` 覆盖（`1/true` 生效）
+- `TEST_BACKUP_CLOUD_ENABLED`：是否启用云端备份
+- `TEST_BACKUP_CLOUD_PROVIDERS`：云厂商列表，逗号分隔（如 `aliyun_oss,tencent_cos`）
+- `TEST_BACKUP_CLOUD_PATH`：云端备份前缀
+- `TEST_BACKUP_OSS_*` / `TEST_BACKUP_COS_*`：OSS/COS 凭证与桶配置
+
 ## 依赖管理（uv）
 - 新增依赖：`uv add 包名`
 - 同步依赖：`uv sync`

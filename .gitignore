@@ -39,3 +39,7 @@ Thumbs.db
 # refs: keep only .gitkeep
 refs/*
 !refs/.gitkeep
+
+# Backup artifacts
+backups/
+!backups/.gitkeep

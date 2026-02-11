@@ -644,72 +644,6 @@ async def role_create(
     return response
 
 
-@router.post("/rbac/roles/{slug}", response_class=HTMLResponse)
-@permission_decorator.permission_meta("rbac", "update")
-async def role_update(
-    request: Request,
-    slug: str,
-) -> HTMLResponse:
-    """更新角色。"""
-
-    request_values = await read_request_values(request)
-    filters, page = parse_role_filters(request_values)
-    role = await role_service.get_role_by_slug(slug)
-    if not role:
-        raise HTTPException(status_code=404, detail="角色不存在")
-
-    form_data = await request.form()
-    form = build_role_form(
-        {
-            "name": str(form_data.get("name", "")).strip(),
-            "slug": role.slug,
-            "status": str(form_data.get("status", "enabled")),
-            "description": str(form_data.get("description", "")).strip(),
-        }
-    )
-    errors = role_errors(form)
-    if errors:
-        context = {
-            **base_context(request),
-            "mode": "edit",
-            "action": f"/admin/rbac/roles/{slug}",
-            "form": form,
-            "errors": errors,
-            "status_meta": STATUS_META,
-            "tree": ROLE_PERMISSION_TREE,
-            "checked_map": build_checked_map(form_data),
-            "action_labels": ACTION_LABELS,
-            "filters": filters,
-            "page": page,
-        }
-        error_status = 200 if _is_htmx_request(request) else 422
-        return templates.TemplateResponse("partials/role_form.html", context, status_code=error_status)
-
-    owner = request.session.get("admin_name") or "system"
-    form["permissions"] = build_permissions(form_data, owner)
-    await role_service.update_role(role, form)
-    await log_service.record_request(
-        request,
-        action="update",
-        module="rbac",
-        target=f"角色: {role.name}",
-        target_id=role.slug,
-        detail=f"更新角色 {role.slug}",
-    )
-    context = await build_role_table_context(request, filters, page)
-    response = templates.TemplateResponse("partials/role_table.html", context)
-    response.headers["HX-Retarget"] = "#role-table"
-    response.headers["HX-Reswap"] = "outerHTML"
-    response.headers["HX-Trigger"] = json.dumps(
-        {
-            "rbac-toast": {"title": "已更新", "message": "角色已修改", "variant": "success"},
-            "rbac-close": True,
-        },
-        ensure_ascii=True,
-    )
-    return response
-
-
 @router.post("/rbac/roles/bulk-delete", response_class=HTMLResponse)
 @permission_decorator.permission_meta("rbac", "delete")
 async def role_bulk_delete(request: Request) -> HTMLResponse:
@@ -774,6 +708,72 @@ async def role_bulk_delete(request: Request) -> HTMLResponse:
                 "message": toast_message,
                 "variant": "warning",
             }
+        },
+        ensure_ascii=True,
+    )
+    return response
+
+
+@router.post("/rbac/roles/{slug}", response_class=HTMLResponse)
+@permission_decorator.permission_meta("rbac", "update")
+async def role_update(
+    request: Request,
+    slug: str,
+) -> HTMLResponse:
+    """更新角色。"""
+
+    request_values = await read_request_values(request)
+    filters, page = parse_role_filters(request_values)
+    role = await role_service.get_role_by_slug(slug)
+    if not role:
+        raise HTTPException(status_code=404, detail="角色不存在")
+
+    form_data = await request.form()
+    form = build_role_form(
+        {
+            "name": str(form_data.get("name", "")).strip(),
+            "slug": role.slug,
+            "status": str(form_data.get("status", "enabled")),
+            "description": str(form_data.get("description", "")).strip(),
+        }
+    )
+    errors = role_errors(form)
+    if errors:
+        context = {
+            **base_context(request),
+            "mode": "edit",
+            "action": f"/admin/rbac/roles/{slug}",
+            "form": form,
+            "errors": errors,
+            "status_meta": STATUS_META,
+            "tree": ROLE_PERMISSION_TREE,
+            "checked_map": build_checked_map(form_data),
+            "action_labels": ACTION_LABELS,
+            "filters": filters,
+            "page": page,
+        }
+        error_status = 200 if _is_htmx_request(request) else 422
+        return templates.TemplateResponse("partials/role_form.html", context, status_code=error_status)
+
+    owner = request.session.get("admin_name") or "system"
+    form["permissions"] = build_permissions(form_data, owner)
+    await role_service.update_role(role, form)
+    await log_service.record_request(
+        request,
+        action="update",
+        module="rbac",
+        target=f"角色: {role.name}",
+        target_id=role.slug,
+        detail=f"更新角色 {role.slug}",
+    )
+    context = await build_role_table_context(request, filters, page)
+    response = templates.TemplateResponse("partials/role_table.html", context)
+    response.headers["HX-Retarget"] = "#role-table"
+    response.headers["HX-Reswap"] = "outerHTML"
+    response.headers["HX-Trigger"] = json.dumps(
+        {
+            "rbac-toast": {"title": "已更新", "message": "角色已修改", "variant": "success"},
+            "rbac-close": True,
         },
         ensure_ascii=True,
     )

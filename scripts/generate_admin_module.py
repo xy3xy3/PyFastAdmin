@@ -285,53 +285,6 @@ async def {module}_edit(request: Request, item_id: str) -> HTMLResponse:
     )
 
 
-@router.post("/{module}/{{item_id}}", response_class=HTMLResponse)
-@permission_decorator.permission_meta("{module}", "update")
-async def {module}_update(request: Request, item_id: str) -> HTMLResponse:
-    """更新数据（脚手架模板，需按业务补充校验）。"""
-
-    item = await {module}_service.get_item(item_id)
-    if not item:
-        raise HTTPException(status_code=404, detail="记录不存在")
-
-    form_data = await request.form()
-    payload = dict(form_data)
-
-    errors: list[str] = []
-    if not str(payload.get("name", "")).strip():
-        errors.append("名称不能为空")
-    if errors:
-        context = {{
-            **base_context(request),
-            "mode": "edit",
-            "action": f"/admin/{module}/{{item_id}}",
-            "errors": errors,
-            "form": payload,
-        }}
-        error_status = 200 if _is_htmx_request(request) else 422
-        return templates.TemplateResponse("partials/{module}_form.html", context, status_code=error_status)
-
-    await {module}_service.update_item(item, payload)
-    await log_service.record_request(
-        request,
-        action="update",
-        module="{module}",
-        target="{title}",
-        target_id=item_id,
-        detail="更新记录",
-    )
-
-    items = await {module}_service.list_items()
-    response = templates.TemplateResponse("partials/{module}_table.html", {{**base_context(request), "items": items}})
-    response.headers["HX-Retarget"] = "#{module}-table"
-    response.headers["HX-Reswap"] = "outerHTML"
-    response.headers["HX-Trigger"] = json.dumps(
-        {{"rbac-toast": {{"title": "已更新", "message": "记录更新成功", "variant": "success"}}, "rbac-close": True}},
-        ensure_ascii=True,
-    )
-    return response
-
-
 @router.post("/{module}/bulk-delete", response_class=HTMLResponse)
 @permission_decorator.permission_meta("{module}", "delete")
 async def {module}_bulk_delete(request: Request) -> HTMLResponse:
@@ -374,6 +327,53 @@ async def {module}_bulk_delete(request: Request) -> HTMLResponse:
 
     response.headers["HX-Trigger"] = json.dumps(
         {{"rbac-toast": {{"title": "批量删除完成", "message": message, "variant": "warning"}}}},
+        ensure_ascii=True,
+    )
+    return response
+
+
+@router.post("/{module}/{{item_id}}", response_class=HTMLResponse)
+@permission_decorator.permission_meta("{module}", "update")
+async def {module}_update(request: Request, item_id: str) -> HTMLResponse:
+    """更新数据（脚手架模板，需按业务补充校验）。"""
+
+    item = await {module}_service.get_item(item_id)
+    if not item:
+        raise HTTPException(status_code=404, detail="记录不存在")
+
+    form_data = await request.form()
+    payload = dict(form_data)
+
+    errors: list[str] = []
+    if not str(payload.get("name", "")).strip():
+        errors.append("名称不能为空")
+    if errors:
+        context = {{
+            **base_context(request),
+            "mode": "edit",
+            "action": f"/admin/{module}/{{item_id}}",
+            "errors": errors,
+            "form": payload,
+        }}
+        error_status = 200 if _is_htmx_request(request) else 422
+        return templates.TemplateResponse("partials/{module}_form.html", context, status_code=error_status)
+
+    await {module}_service.update_item(item, payload)
+    await log_service.record_request(
+        request,
+        action="update",
+        module="{module}",
+        target="{title}",
+        target_id=item_id,
+        detail="更新记录",
+    )
+
+    items = await {module}_service.list_items()
+    response = templates.TemplateResponse("partials/{module}_table.html", {{**base_context(request), "items": items}})
+    response.headers["HX-Retarget"] = "#{module}-table"
+    response.headers["HX-Reswap"] = "outerHTML"
+    response.headers["HX-Trigger"] = json.dumps(
+        {{"rbac-toast": {{"title": "已更新", "message": "记录更新成功", "variant": "success"}}, "rbac-close": True}},
         ensure_ascii=True,
     )
     return response
@@ -583,11 +583,6 @@ def render_table(module: str, title: str) -> str:
   {{% if perm['delete'] %}}
     <form
       class="mt-4 space-y-4 pb-20"
-      hx-post="/admin/{module}/bulk-delete"
-      hx-target="#{module}-table"
-      hx-swap="outerHTML"
-      hx-indicator="#global-indicator"
-      hx-confirm="确认批量删除已勾选的记录吗？"
     >
       <input type="hidden" name="csrf_token" value="{{{{ request.state.csrf_token or '' }}}}" />
 
@@ -667,7 +662,18 @@ def render_table(module: str, title: str) -> str:
       >
         <div class="mx-auto flex w-full max-w-[1440px] items-center justify-between gap-3 px-4 py-3">
           <p class="text-sm text-slate-700">已选择 <strong data-bulk-count>0</strong> 项</p>
-          <button type="submit" class="btn-ghost text-red-500 hover:text-red-600" data-bulk-submit disabled>
+          <button
+            type="button"
+            class="btn-ghost text-red-500 hover:text-red-600"
+            data-bulk-submit
+            hx-post="/admin/{module}/bulk-delete"
+            hx-include="closest form"
+            hx-target="#{module}-table"
+            hx-swap="outerHTML"
+            hx-indicator="#global-indicator"
+            hx-confirm="确认批量删除已勾选的记录吗？"
+            disabled
+          >
             批量删除
           </button>
         </div>

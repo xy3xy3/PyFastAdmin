@@ -73,6 +73,8 @@ def test_render_table_includes_bulk_delete_controls(scaffold_module) -> None:
     assert 'data-bulk-bottom' in rendered
     assert 'data-bulk-overlay' in rendered
     assert 'hx-post="/admin/demo_inventory/bulk-delete"' in rendered
+    assert 'hx-include="closest form"' in rendered
+    assert 'hx-confirm="确认批量删除已勾选的记录吗？"' in rendered
     assert 'fa-rotate-right' in rendered
 
 

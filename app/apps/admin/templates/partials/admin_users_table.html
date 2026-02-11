@@ -39,11 +39,6 @@
   {% if admin_perm['delete'] %}
     <form
       class="mt-4 space-y-4 pb-20"
-      hx-post="/admin/users/bulk-delete"
-      hx-target="#admin-table"
-      hx-swap="outerHTML"
-      hx-indicator="#global-indicator"
-      hx-confirm="确认批量删除已勾选的管理员吗？"
     >
       <input type="hidden" name="csrf_token" value="{{ request.state.csrf_token or '' }}" />
       <input type="hidden" name="search_q" value="{{ filters.search_q }}" />
@@ -159,7 +154,18 @@
       >
         <div class="mx-auto flex w-full max-w-[1440px] items-center justify-between gap-3 px-4 py-3">
           <p class="text-sm text-slate-700">已选择 <strong data-bulk-count>0</strong> 项</p>
-          <button type="submit" class="btn-ghost text-red-500 hover:text-red-600" data-bulk-submit disabled>
+          <button
+            type="button"
+            class="btn-ghost text-red-500 hover:text-red-600"
+            data-bulk-submit
+            hx-post="/admin/users/bulk-delete"
+            hx-include="closest form"
+            hx-target="#admin-table"
+            hx-swap="outerHTML"
+            hx-indicator="#global-indicator"
+            hx-confirm="确认批量删除已勾选的管理员吗？"
+            disabled
+          >
             批量删除
           </button>
         </div>

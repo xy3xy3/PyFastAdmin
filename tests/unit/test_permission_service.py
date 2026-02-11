@@ -213,3 +213,21 @@ def test_required_permission_prefers_explicit_route_declaration() -> None:
     assert permission_service.required_permission("/admin/backup/demo/restore", "POST") == ("backup_records", "restore")
     assert permission_service.required_permission("/admin/profile", "POST") == ("profile", "update_self")
     assert permission_service.required_permission("/admin/password", "POST") == ("password", "update_self")
+
+
+@pytest.mark.unit
+def test_bulk_delete_routes_are_registered_before_dynamic_post_routes() -> None:
+    """避免 /bulk-delete 被 /{id} 等动态 POST 路由抢先匹配。"""
+
+    def route_index(path: str, method: str) -> int:
+        for index, route in enumerate(app.routes):
+            if not isinstance(route, APIRoute):
+                continue
+            if route.path != path:
+                continue
+            if method in (route.methods or set()):
+                return index
+        raise AssertionError(f"未找到路由: {method} {path}")
+
+    assert route_index("/admin/users/bulk-delete", "POST") < route_index("/admin/users/{item_id}", "POST")
+    assert route_index("/admin/rbac/roles/bulk-delete", "POST") < route_index("/admin/rbac/roles/{slug}", "POST")

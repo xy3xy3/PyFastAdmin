@@ -1,6 +1,6 @@
 <div id="backup-table" class="space-y-4">
-  {% set backup_perm = request.state.permission_flags.backup %}
-  {% set show_action_col = backup_perm['update'] or backup_perm['delete'] %}
+  {% set backup_records_perm = request.state.permission_flags.backup_records %}
+  {% set show_action_col = backup_records_perm['restore'] or backup_records_perm['delete'] %}
 
   <div class="flex flex-wrap items-center justify-between gap-3">
     <p class="text-sm text-slate-500">共 {{ pagination.total }} 条记录</p>
@@ -79,7 +79,7 @@
               <td class="px-4 py-3 text-slate-500">{{ item.finished_at | fmt_dt or "-" }}</td>
               {% if show_action_col %}
                 <td class="px-4 py-3 text-right">
-                  {% if backup_perm['update'] %}
+                  {% if backup_records_perm['restore'] %}
                     <button
                       class="btn-link {% if not can_restore %}pointer-events-none opacity-40{% endif %}"
                       hx-post="/admin/backup/{{ item.id }}/restore"
@@ -93,9 +93,9 @@
                       恢复
                     </button>
                   {% endif %}
-                  {% if backup_perm['delete'] %}
+                  {% if backup_records_perm['delete'] %}
                     <button
-                      class="btn-link text-red-500 hover:text-red-600 {% if backup_perm['update'] %}ml-3{% endif %}"
+                      class="btn-link text-red-500 hover:text-red-600 {% if backup_records_perm['restore'] %}ml-3{% endif %}"
                       hx-delete="/admin/backup/{{ item.id }}"
                       hx-target="#backup-table-container"
                       hx-swap="innerHTML"

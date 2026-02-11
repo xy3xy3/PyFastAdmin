@@ -11,7 +11,7 @@ from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 
-from app.apps.admin.registry import ADMIN_TREE, iter_leaf_nodes
+from app.apps.admin.registry import ADMIN_TREE, iter_assignable_leaf_nodes
 from app.services import admin_user_service, log_service, permission_decorator, role_service, validators
 
 BASE_DIR = Path(__file__).resolve().parents[1]
@@ -51,7 +51,42 @@ ACTION_LABELS = {
     "read": "查看",
     "update": "编辑",
     "delete": "删除",
+    "trigger": "触发",
+    "restore": "恢复",
+    "update_self": "修改本人",
 }
+
+
+def build_role_permission_tree() -> list[dict[str, Any]]:
+    """构建可分配权限树，自动剔除不可分配资源。"""
+
+    def filter_node(node: dict[str, Any]) -> dict[str, Any] | None:
+        children = node.get("children")
+        if isinstance(children, list) and children:
+            filtered_children = [
+                child
+                for child in (filter_node(item) for item in children)
+                if child is not None
+            ]
+            if not filtered_children:
+                return None
+            return {
+                **node,
+                "children": filtered_children,
+            }
+
+        if not bool(node.get("assignable", True)):
+            return None
+        return dict(node)
+
+    return [
+        item
+        for item in (filter_node(node) for node in ADMIN_TREE)
+        if item is not None
+    ]
+
+
+ROLE_PERMISSION_TREE = build_role_permission_tree()
 
 
 def base_context(request: Request) -> dict[str, Any]:
@@ -225,7 +260,7 @@ def build_checked_map(form_data: Any) -> dict[str, set[str]]:
     """从表单解析权限勾选状态。"""
 
     checked_map: dict[str, set[str]] = {}
-    for node in iter_leaf_nodes(ADMIN_TREE):
+    for node in iter_assignable_leaf_nodes(ADMIN_TREE):
         actions = form_data.getlist(f"perm_{node['key']}")
         if actions:
             checked_map[node["key"]] = set(actions)
@@ -236,14 +271,19 @@ def build_permissions(form_data: Any, owner: str) -> list[dict[str, Any]]:
     """将表单勾选项转换为权限列表，并统一补齐 read 依赖。"""
 
     permissions: list[dict[str, Any]] = []
-    for node in iter_leaf_nodes(ADMIN_TREE):
+    for node in iter_assignable_leaf_nodes(ADMIN_TREE):
         allowed_actions = set(node.get("actions", []))
         actions = [
             str(action)
             for action in form_data.getlist(f"perm_{node['key']}")
             if str(action) in allowed_actions
         ]
-        if "read" in allowed_actions and any(action != "read" for action in actions) and "read" not in actions:
+        if (
+            bool(node.get("require_read", True))
+            and "read" in allowed_actions
+            and any(action != "read" for action in actions)
+            and "read" not in actions
+        ):
             actions.append("read")
 
         for action in actions:
@@ -498,7 +538,7 @@ async def role_new(request: Request) -> HTMLResponse:
         "form": form,
         "errors": [],
         "status_meta": STATUS_META,
-        "tree": ADMIN_TREE,
+        "tree": ROLE_PERMISSION_TREE,
         "checked_map": {},
         "action_labels": ACTION_LABELS,
         "filters": filters,
@@ -532,7 +572,7 @@ async def role_edit(request: Request, slug: str) -> HTMLResponse:
         "form": form,
         "errors": [],
         "status_meta": STATUS_META,
-        "tree": ADMIN_TREE,
+        "tree": ROLE_PERMISSION_TREE,
         "checked_map": checked_map,
         "action_labels": ACTION_LABELS,
         "filters": filters,
@@ -570,7 +610,7 @@ async def role_create(
             "form": form,
             "errors": errors,
             "status_meta": STATUS_META,
-            "tree": ADMIN_TREE,
+            "tree": ROLE_PERMISSION_TREE,
             "checked_map": build_checked_map(form_data),
             "action_labels": ACTION_LABELS,
             "filters": filters,
@@ -636,7 +676,7 @@ async def role_update(
             "form": form,
             "errors": errors,
             "status_meta": STATUS_META,
-            "tree": ADMIN_TREE,
+            "tree": ROLE_PERMISSION_TREE,
             "checked_map": build_checked_map(form_data),
             "action_labels": ACTION_LABELS,
             "filters": filters,

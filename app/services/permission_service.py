@@ -18,6 +18,17 @@ _RESOURCE_ACTIONS: dict[str, set[str]] = {
     for node in iter_leaf_nodes(ADMIN_TREE)
 }
 
+_RESOURCE_REQUIRE_READ: dict[str, bool] = {
+    node["key"]: bool(node.get("require_read", True))
+    for node in iter_leaf_nodes(ADMIN_TREE)
+}
+
+_SELF_SERVICE_ACTIONS: dict[str, set[str]] = {
+    node["key"]: set(node.get("actions", []))
+    for node in iter_leaf_nodes(ADMIN_TREE)
+    if str(node.get("mode") or "").strip() == "self_service"
+}
+
 _RESOURCE_URLS: list[tuple[str, str]] = sorted(
     [
         ((str(node.get("url") or "").rstrip("/") or "/"), node["key"])
@@ -31,6 +42,7 @@ _RESOURCE_URLS: list[tuple[str, str]] = sorted(
 _RESOURCE_BASE_URLS: dict[str, str] = {
     resource: url for url, resource in _RESOURCE_URLS
 }
+
 
 def _normalize_permission_items(items: list[Any] | None) -> dict[str, set[str]]:
     permission_map: dict[str, set[str]] = {}
@@ -50,7 +62,7 @@ def _normalize_permission_items(items: list[Any] | None) -> dict[str, set[str]]:
 
 
 def _apply_action_constraints(permission_map: dict[str, set[str]]) -> dict[str, set[str]]:
-    """约束动作依赖：有增删改必须有查看。"""
+    """约束动作依赖：需要 read 依赖的资源必须先有 read。"""
 
     normalized: dict[str, set[str]] = {}
     for resource, actions in permission_map.items():
@@ -59,15 +71,32 @@ def _apply_action_constraints(permission_map: dict[str, set[str]]) -> dict[str, 
             continue
 
         action_set = set(actions) & allowed_actions
-        if "read" in allowed_actions and "read" not in action_set:
-            action_set.discard("create")
-            action_set.discard("update")
-            action_set.discard("delete")
+        if (
+            _RESOURCE_REQUIRE_READ.get(resource, True)
+            and "read" in allowed_actions
+            and "read" not in action_set
+        ):
+            # 对依赖 read 的资源，read 缺失时剔除所有非 read 动作。
+            action_set = {action for action in action_set if action == "read"}
 
         if action_set:
             normalized[resource] = action_set
 
     return normalized
+
+
+def _apply_builtin_grants(permission_map: dict[str, set[str]]) -> dict[str, set[str]]:
+    """注入系统内置权限（如 self_service 登录即允许）。"""
+
+    merged: dict[str, set[str]] = {
+        resource: set(actions)
+        for resource, actions in permission_map.items()
+    }
+
+    for resource, actions in _SELF_SERVICE_ACTIONS.items():
+        merged.setdefault(resource, set()).update(actions)
+
+    return _apply_action_constraints(merged)
 
 
 async def resolve_permission_map(request: Request) -> dict[str, set[str]]:
@@ -87,18 +116,12 @@ async def resolve_permission_map(request: Request) -> dict[str, set[str]]:
     role = await role_service.get_role_by_slug(admin.role_slug)
     request.state.current_role_model = role
 
-    if role and role.status != "enabled":
-        request.state.permission_map = {}
-        request.state.permission_flags = build_permission_flags({})
-        return {}
+    permission_map: dict[str, set[str]] = {}
+    if role and role.status == "enabled":
+        permission_map = _normalize_permission_items(role.permissions)
 
-    if not role:
-        request.state.permission_map = {}
-        request.state.permission_flags = build_permission_flags({})
-        return {}
-
-    permission_map = _normalize_permission_items(role.permissions)
     permission_map = _apply_action_constraints(permission_map)
+    permission_map = _apply_builtin_grants(permission_map)
 
     request.state.permission_map = permission_map
     request.state.permission_flags = build_permission_flags(permission_map)
@@ -110,11 +133,12 @@ def can(permission_map: dict[str, set[str]], resource: str, action: str) -> bool
 
 
 def build_resource_flags(permission_map: dict[str, set[str]], resource: str) -> dict[str, bool]:
+    """按资源声明的动作动态构建布尔标记。"""
+
+    actions = _RESOURCE_ACTIONS.get(resource, set())
     return {
-        "create": can(permission_map, resource, "create"),
-        "read": can(permission_map, resource, "read"),
-        "update": can(permission_map, resource, "update"),
-        "delete": can(permission_map, resource, "delete"),
+        action: can(permission_map, resource, action)
+        for action in sorted(actions)
     }
 
 
@@ -137,14 +161,17 @@ def build_permission_flags(permission_map: dict[str, set[str]]) -> dict[str, Any
     menu_flags: dict[str, bool] = {}
     for group in ADMIN_TREE:
         leaf_keys = [node["key"] for node in iter_leaf_nodes([group])]
-        menu_flags[group["key"]] = any(resource_flags.get(key, {}).get("read", False) for key in leaf_keys)
+        menu_flags[group["key"]] = any(
+            any(resource_flags.get(key, {}).values())
+            for key in leaf_keys
+        )
 
     # 兼容旧模板菜单键，降低迁移成本。
     menu_flags["security"] = menu_flags.get("security", False)
     menu_flags["system"] = menu_flags.get("system", False)
     menu_flags["profile"] = (
-        resource_flags.get("profile", {}).get("read", False)
-        or resource_flags.get("password", {}).get("read", False)
+        any(resource_flags.get("profile", {}).values())
+        or any(resource_flags.get("password", {}).values())
     )
     flags["menus"] = {
         **menu_flags,

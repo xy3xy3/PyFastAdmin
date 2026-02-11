@@ -124,7 +124,7 @@
     >
       <div class="flex flex-wrap items-center justify-between gap-3">
         <h2 class="text-base font-semibold text-slate-900">备份配置（OSS / COS）</h2>
-        {% if request.state.permission_flags.backup['read'] %}
+        {% if request.state.permission_flags.backup_records['read'] %}
           <a href="/admin/backup" class="text-sm text-blue-600 hover:text-blue-700">前往备份管理</a>
         {% endif %}
       </div>

@@ -59,16 +59,22 @@
 
 ## 3. RBAC 权限开发硬性规则
 
-### 3.1 CRUD 与依赖关系
-- 权限粒度必须支持 `create/read/update/delete`。
-- 必须满足依赖：**未勾选 read 时，不允许 create/update/delete 生效**。
-- `viewer` 角色默认只读（仅 read）。
+### 3.1 资源类型与动作模板
+- 资源按 `mode` 建模，常用模板：
+  - `table`：`create/read/update/delete`
+  - `settings`：`read/update`
+  - `operation`：`read/trigger/restore/delete`
+  - `self_service`：`read/update_self`（默认登录即允许，不参与角色分配）
+- `viewer` 角色默认只读：仅保留各资源 `read` 动作。
+- 新资源必须在 `registry.py` 或 `registry_generated/*.json` 明确 `mode` + `actions`。
 
 ### 3.2 前端按钮/列显示规则（必须）
-- 无 `create` 权限：隐藏“新建”按钮。
-- 无 `update` 权限：隐藏“编辑”按钮。
-- 无 `delete` 权限：隐藏“删除”按钮。
-- 若同时无 `update` 与 `delete`：**整列“操作”不显示**。
+- 列表型（`table`）页面遵循：
+  - 无 `create` 权限：隐藏“新建”按钮。
+  - 无 `update` 权限：隐藏“编辑”按钮。
+  - 无 `delete` 权限：隐藏“删除”按钮。
+  - 若同时无 `update` 与 `delete`：**整列“操作”不显示**。
+- 非列表型页面按语义动作控制按钮（如 `trigger/restore/update_self`），禁止生搬 CRUD 文案。
 
 ### 3.3 Jinja 权限判断写法（重要）
 - 权限对象是字典时，必须使用下标写法：
@@ -82,8 +88,9 @@
   - `auth.py` 中间件是否能拦截并返回 403。
 
 ### 3.5 角色权限保存约束
-- 角色保存时需要二次兜底 read 依赖约束。
-- 权限解析时也要做约束清洗（防脏数据绕过）。
+- `assignable=false` 资源禁止进入角色权限树（例如 `self_service`）。
+- `require_read=true` 且资源存在 `read` 动作时，保存与解析阶段都要兜底：缺少 `read` 时清理其它动作。
+- 权限解析时必须做动作白名单清洗（防脏数据绕过）。
 
 ---
 
@@ -108,6 +115,7 @@
 - `app/apps/admin/templates/partials/<module>_form.html`
 - `tests/unit/test_<module>_scaffold.py`
 - `app/apps/admin/registry_generated/<module>.json`
+  - 默认包含：`mode=table` 与 CRUD `actions`
 - 自动更新：`app/models/__init__.py` 与 `app/db.py`
 
 ### 4.4 脚手架后必做事项

@@ -138,7 +138,7 @@ async def profile_page(request: Request) -> HTMLResponse:
 
 
 @router.post("/profile", response_class=HTMLResponse)
-@permission_decorator.permission_meta("profile", "update")
+@permission_decorator.permission_meta("profile", "update_self")
 async def profile_update(
     request: Request,
     display_name: str = Form(""),
@@ -217,7 +217,7 @@ async def password_page(request: Request) -> HTMLResponse:
 
 
 @router.post("/password", response_class=HTMLResponse)
-@permission_decorator.permission_meta("password", "update")
+@permission_decorator.permission_meta("password", "update_self")
 async def password_update(
     request: Request,
     old_password: str = Form(""),

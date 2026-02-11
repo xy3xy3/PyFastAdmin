@@ -26,6 +26,7 @@ def test_build_default_role_permissions_for_super_has_crud() -> None:
     assert ("rbac", "update") in mapping
     assert ("admin_users", "delete") in mapping
     assert ("config", "update") in mapping
+    assert ("profile", "update_self") not in mapping
 
 
 @pytest.mark.unit
@@ -188,7 +189,9 @@ async def test_ensure_default_roles_appends_missing_permissions(monkeypatch) -> 
     await role_service.ensure_default_roles()
 
     restored_pairs = {(item["resource"], item["action"]) for item in role.permissions}
-    assert ("backup", "read") in restored_pairs
-    assert ("backup", "update") in restored_pairs
+    assert ("backup_config", "read") in restored_pairs
+    assert ("backup_config", "update") in restored_pairs
+    assert ("backup_records", "trigger") in restored_pairs
+    assert ("backup_records", "restore") in restored_pairs
     assert created_payloads
     assert {item["slug"] for item in created_payloads} == {"admin", "viewer"}

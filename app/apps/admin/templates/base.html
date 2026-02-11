@@ -142,7 +142,7 @@
                         操作日志
                       </a>
                     {% endif %}
-                    {% if perm.backup.read %}
+                    {% if perm.backup_records.read %}
                       <a class="sider-link {% if path.startswith('/admin/backup') %}sider-link-active{% endif %}" href="/admin/backup" x-on:click="mobileSidebarOpen = false">
                         <i class="fa-solid fa-database sider-icon"></i>
                         数据备份
@@ -231,7 +231,7 @@
                           操作日志
                         </a>
                       {% endif %}
-                      {% if perm.backup.read %}
+                      {% if perm.backup_records.read %}
                         <a class="compact-flyout-link {% if path.startswith('/admin/backup') %}compact-flyout-link-active{% endif %}" href="/admin/backup" x-on:click="collapsedMenuOpen = ''">
                           数据备份
                         </a>

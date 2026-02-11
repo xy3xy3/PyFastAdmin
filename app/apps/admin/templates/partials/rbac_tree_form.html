@@ -21,6 +21,9 @@
         <span>
           <p class="text-sm font-semibold text-ink">{{ node.name }}</p>
           <p class="text-xs text-muted">{{ node.url }}</p>
+          {% if node.mode %}
+            <p class="text-[11px] text-muted/80">资源类型：{{ {"table": "表格数据", "settings": "系统设置", "operation": "任务操作", "self_service": "个人自助"}.get(node.mode, node.mode) }}</p>
+          {% endif %}
         </span>
       </label>
       <div class="flex flex-wrap gap-2">
@@ -34,7 +37,7 @@
               {% if action == "read" %}data-perm-read="true"{% endif %}
               {% if action in checked_map.get(node.key, []) %}checked{% endif %}
             />
-            {{ action_labels[action] }}
+            {{ action_labels.get(action, action) }}
           </label>
         {% endfor %}
       </div>

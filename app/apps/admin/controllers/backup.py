@@ -140,6 +140,7 @@ async def build_table_context(
 
 
 @router.get("/backup", response_class=HTMLResponse)
+@permission_decorator.permission_meta("backup_records", "read")
 async def backup_page(request: Request) -> HTMLResponse:
     """备份管理主页。"""
     config = await backup_service.get_backup_config()
@@ -166,6 +167,7 @@ async def backup_page(request: Request) -> HTMLResponse:
 
 
 @router.get("/backup/table", response_class=HTMLResponse)
+@permission_decorator.permission_meta("backup_records", "read")
 async def backup_table(request: Request) -> HTMLResponse:
     """HTMX 局部刷新备份记录表格。"""
     page = parse_positive_int(request.query_params.get("page"), default=1)
@@ -175,6 +177,7 @@ async def backup_table(request: Request) -> HTMLResponse:
 
 
 @router.get("/backup/collections", response_class=HTMLResponse)
+@permission_decorator.permission_meta("backup_config", "read")
 async def backup_collections(request: Request) -> HTMLResponse:
     """HTMX 局部刷新可选集合列表。"""
     config = await backup_service.get_backup_config()
@@ -188,7 +191,7 @@ async def backup_collections(request: Request) -> HTMLResponse:
 
 
 @router.post("/backup", response_class=HTMLResponse)
-@permission_decorator.permission_meta("backup", "update")
+@permission_decorator.permission_meta("backup_config", "update")
 async def backup_save_config(request: Request) -> HTMLResponse:
     """保存备份配置。"""
     form = await request.form()
@@ -249,7 +252,7 @@ async def backup_save_config(request: Request) -> HTMLResponse:
 
 
 @router.post("/backup/trigger", response_class=HTMLResponse)
-@permission_decorator.permission_meta("backup", "create")
+@permission_decorator.permission_meta("backup_records", "trigger")
 async def backup_trigger(request: Request) -> HTMLResponse:
     """手动触发一次备份。"""
     record = await backup_service.run_backup()
@@ -275,7 +278,7 @@ async def backup_trigger(request: Request) -> HTMLResponse:
 
 
 @router.post("/backup/{record_id}/restore", response_class=HTMLResponse)
-@permission_decorator.permission_meta("backup", "update")
+@permission_decorator.permission_meta("backup_records", "restore")
 async def backup_restore(request: Request, record_id: str) -> HTMLResponse:
     """按指定备份记录恢复数据库。"""
     values = await read_request_values(request)
@@ -306,7 +309,7 @@ async def backup_restore(request: Request, record_id: str) -> HTMLResponse:
 
 
 @router.delete("/backup/{record_id}", response_class=HTMLResponse)
-@permission_decorator.permission_meta("backup", "delete")
+@permission_decorator.permission_meta("backup_records", "delete")
 async def backup_delete(request: Request, record_id: str) -> HTMLResponse:
     """删除一条备份记录。"""
     values = await read_request_values(request)

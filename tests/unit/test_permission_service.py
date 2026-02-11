@@ -18,11 +18,11 @@ def test_required_permission_route_mapping() -> None:
         "update",
     )
     assert permission_service.required_permission("/admin/rbac/roles/viewer", "DELETE") == ("rbac", "delete")
-    assert permission_service.required_permission("/admin/backup", "GET") == ("backup", "read")
-    assert permission_service.required_permission("/admin/backup/table", "GET") == ("backup", "read")
-    assert permission_service.required_permission("/admin/backup/collections", "GET") == ("backup", "read")
-    assert permission_service.required_permission("/admin/backup/demo", "DELETE") == ("backup", "delete")
-    assert permission_service.required_permission("/admin/backup/demo/restore", "POST") == ("backup", "update")
+    assert permission_service.required_permission("/admin/backup", "GET") == ("backup_records", "read")
+    assert permission_service.required_permission("/admin/backup/table", "GET") == ("backup_records", "read")
+    assert permission_service.required_permission("/admin/backup/collections", "GET") == ("backup_config", "read")
+    assert permission_service.required_permission("/admin/backup/demo", "DELETE") == ("backup_records", "delete")
+    assert permission_service.required_permission("/admin/backup/demo/restore", "POST") == ("backup_records", "restore")
     assert permission_service.required_permission("/admin/logs/demo", "DELETE") == ("operation_logs", "delete")
     assert permission_service.required_permission("/admin/logs/bulk-delete", "POST") == ("operation_logs", "delete")
     assert permission_service.required_permission("/admin/unknown", "GET") is None
@@ -96,8 +96,11 @@ async def test_resolve_permission_map_uses_role_permissions_without_slug_special
     assert permission_map == {
         "admin_users": {"read", "update"},
         "config": {"read"},
+        "profile": {"read", "update_self"},
+        "password": {"read", "update_self"},
     }
     assert request.state.permission_flags["admin_users"]["update"] is True
+    assert request.state.permission_flags["profile"]["update_self"] is True
 
 
 @pytest.mark.unit
@@ -124,12 +127,15 @@ async def test_resolve_permission_map_requires_read_for_mutating_actions(monkeyp
 
     permission_map = await permission_service.resolve_permission_map(request)
 
-    assert permission_map == {}
+    assert permission_map == {
+        "profile": {"read", "update_self"},
+        "password": {"read", "update_self"},
+    }
 
 
 @pytest.mark.unit
 @pytest.mark.asyncio
-async def test_resolve_permission_map_returns_empty_when_role_missing(monkeypatch) -> None:
+async def test_resolve_permission_map_keeps_self_service_when_role_missing(monkeypatch) -> None:
     request = SimpleNamespace(session={"admin_id": "abc"}, state=SimpleNamespace())
 
     admin = SimpleNamespace(status="enabled", role_slug="viewer")
@@ -145,12 +151,15 @@ async def test_resolve_permission_map_returns_empty_when_role_missing(monkeypatc
 
     permission_map = await permission_service.resolve_permission_map(request)
 
-    assert permission_map == {}
+    assert permission_map == {
+        "profile": {"read", "update_self"},
+        "password": {"read", "update_self"},
+    }
 
 
 @pytest.mark.unit
 @pytest.mark.asyncio
-async def test_resolve_permission_map_returns_empty_for_disabled_role(monkeypatch) -> None:
+async def test_resolve_permission_map_keeps_self_service_for_disabled_role(monkeypatch) -> None:
     request = SimpleNamespace(session={"admin_id": "abc"}, state=SimpleNamespace())
 
     admin = SimpleNamespace(status="enabled", role_slug="viewer")
@@ -167,7 +176,10 @@ async def test_resolve_permission_map_returns_empty_for_disabled_role(monkeypatc
 
     permission_map = await permission_service.resolve_permission_map(request)
 
-    assert permission_map == {}
+    assert permission_map == {
+        "profile": {"read", "update_self"},
+        "password": {"read", "update_self"},
+    }
 
 
 @pytest.mark.unit
@@ -182,6 +194,7 @@ def test_build_permission_flags_contains_dynamic_resource_map() -> None:
     assert "resources" in flags
     assert flags["resources"]["dashboard_home"]["read"] is True
     assert flags["resources"]["admin_users"]["read"] is False
+    assert flags["resources"]["backup_records"]["trigger"] is False
     assert flags["menus"]["accounts"] is True
 
 
@@ -195,6 +208,8 @@ def test_required_permission_prefers_explicit_route_declaration() -> None:
     assert permission_service.required_permission("/admin/config", "POST") == ("config", "update")
     assert permission_service.required_permission("/admin/rbac/roles/import", "GET") == ("rbac", "update")
     assert permission_service.required_permission("/admin/rbac/roles/import", "POST") == ("rbac", "update")
-    assert permission_service.required_permission("/admin/backup", "POST") == ("backup", "update")
-    assert permission_service.required_permission("/admin/backup/trigger", "POST") == ("backup", "create")
-    assert permission_service.required_permission("/admin/backup/demo/restore", "POST") == ("backup", "update")
+    assert permission_service.required_permission("/admin/backup", "POST") == ("backup_config", "update")
+    assert permission_service.required_permission("/admin/backup/trigger", "POST") == ("backup_records", "trigger")
+    assert permission_service.required_permission("/admin/backup/demo/restore", "POST") == ("backup_records", "restore")
+    assert permission_service.required_permission("/admin/profile", "POST") == ("profile", "update_self")
+    assert permission_service.required_permission("/admin/password", "POST") == ("password", "update_self")

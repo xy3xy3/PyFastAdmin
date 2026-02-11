@@ -804,6 +804,7 @@ def test_{module}_registry_generated_contains_crud_actions() -> None:
     payload = json.loads(Path("app/apps/admin/registry_generated/{module}.json").read_text(encoding="utf-8"))
 
     assert payload["node"]["key"] == "{module}"
+    assert payload["node"]["mode"] == "table"
     assert payload["node"]["actions"] == ["create", "read", "update", "delete"]
 '''
 
@@ -817,6 +818,7 @@ def render_registry(module: str, title: str, group: str, url: str) -> str:
             "key": module,
             "name": title,
             "url": url,
+            "mode": "table",
             "actions": ["create", "read", "update", "delete"],
         },
     }

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from app.apps.admin.registry import ADMIN_TREE, iter_leaf_nodes
+from app.apps.admin.registry import ADMIN_TREE, iter_assignable_leaf_nodes, iter_leaf_nodes
 from app.models import AdminUser, Role
 from app.models.role import utc_now
 from app.services import validators
@@ -20,6 +20,14 @@ ROLE_TRANSFER_VERSION = 1
 
 _RESOURCE_ACTIONS = {
     node["key"]: set(node.get("actions", []))
+    for node in iter_leaf_nodes(ADMIN_TREE)
+}
+_RESOURCE_REQUIRE_READ = {
+    node["key"]: bool(node.get("require_read", True))
+    for node in iter_leaf_nodes(ADMIN_TREE)
+}
+_RESOURCE_ASSIGNABLE = {
+    node["key"]: bool(node.get("assignable", True))
     for node in iter_leaf_nodes(ADMIN_TREE)
 }
 _RESOURCE_META = {
@@ -44,7 +52,7 @@ def build_default_role_permissions(role_slug: str, owner: str = "system") -> lis
         return []
 
     permissions: list[dict[str, Any]] = []
-    for node in iter_leaf_nodes(ADMIN_TREE):
+    for node in iter_assignable_leaf_nodes(ADMIN_TREE):
         actions = action_picker(node.get("actions", []))
         if not actions:
             continue
@@ -104,6 +112,8 @@ def _sanitize_permissions(raw_permissions: Any, owner: str) -> list[dict[str, An
         status = str(item.get("status") or "enabled").strip().lower()
         if status != "enabled":
             continue
+        if not _RESOURCE_ASSIGNABLE.get(resource, True):
+            continue
         if action not in _RESOURCE_ACTIONS.get(resource, set()):
             continue
         permission_map.setdefault(resource, set()).add(action)
@@ -113,10 +123,12 @@ def _sanitize_permissions(raw_permissions: Any, owner: str) -> list[dict[str, An
         allowed_actions = _RESOURCE_ACTIONS.get(resource, set())
         action_set = set(actions) & allowed_actions
 
-        if "read" in allowed_actions and "read" not in action_set:
-            action_set.discard("create")
-            action_set.discard("update")
-            action_set.discard("delete")
+        if (
+            _RESOURCE_REQUIRE_READ.get(resource, True)
+            and "read" in allowed_actions
+            and "read" not in action_set
+        ):
+            action_set = {action for action in action_set if action == "read"}
 
         node = _RESOURCE_META.get(resource)
         if not node:
@@ -317,7 +329,9 @@ def _extract_permission_pairs(raw_permissions: Any) -> set[tuple[str, str]]:
             resource = str(getattr(item, "resource", "") or "").strip()
             action = str(getattr(item, "action", "") or "").strip().lower()
 
-        if not resource or action not in _RESOURCE_ACTIONS.get(resource, set()):
+        if not resource or not _RESOURCE_ASSIGNABLE.get(resource, True):
+            continue
+        if action not in _RESOURCE_ACTIONS.get(resource, set()):
             continue
         pairs.add((resource, action))
 

@@ -65,10 +65,26 @@
   - `settings`：`read/update`
   - `operation`：`read/trigger/restore/delete`
   - `self_service`：`read/update_self`（默认登录即允许，不参与角色分配）
+- 当前系统动作白名单：`create/read/update/delete/trigger/restore/update_self`。
 - `viewer` 角色默认只读：仅保留各资源 `read` 动作。
 - 新资源必须在 `registry.py` 或 `registry_generated/*.json` 明确 `mode` + `actions`。
+- 新增动作时必须同步：
+  - `app/apps/admin/registry.py`（`RESOURCE_ACTION_TEMPLATES` / `VALID_ACTIONS`）
+  - `app/apps/admin/controllers/rbac.py`（`ACTION_LABELS` 展示文案）
+  - `app/services/permission_service.py`（自动推导与路由鉴权）
 
-### 3.2 前端按钮/列显示规则（必须）
+### 3.2 内置资源映射（改动前先对照）
+- `dashboard_home`：`settings`，`read`
+- `rbac`：`table`，`create/read/update/delete`
+- `admin_users`：`table`，`create/read/update/delete`
+- `profile`：`self_service`，`read/update_self`（`assignable=false`，`require_read=false`）
+- `password`：`self_service`，`read/update_self`（`assignable=false`，`require_read=false`）
+- `config`：`settings`，`read/update`
+- `operation_logs`：`operation`，`read/delete`
+- `backup_config`：`settings`，`read/update`
+- `backup_records`：`operation`，`read/trigger/restore/delete`
+
+### 3.3 前端按钮/列显示规则（必须）
 - 列表型（`table`）页面遵循：
   - 无 `create` 权限：隐藏“新建”按钮。
   - 无 `update` 权限：隐藏“编辑”按钮。
@@ -76,21 +92,24 @@
   - 若同时无 `update` 与 `delete`：**整列“操作”不显示**。
 - 非列表型页面按语义动作控制按钮（如 `trigger/restore/update_self`），禁止生搬 CRUD 文案。
 
-### 3.3 Jinja 权限判断写法（重要）
+### 3.4 Jinja 权限判断写法（重要）
 - 权限对象是字典时，必须使用下标写法：
   - `perm['update']`、`perm['delete']`、`perm['create']`。
 - 禁止使用 `perm.update` 这类点写法，避免命中字典方法导致误判（会造成按钮错误显示）。
 
-### 3.4 后端接口鉴权（必须）
+### 3.5 后端接口鉴权（必须）
 - 仅做前端隐藏不够，所有对应接口必须鉴权。
 - 新增/修改路由后，务必同步检查：
   - `permission_service.required_permission(...)` 是否已映射到正确 resource/action。
   - `auth.py` 中间件是否能拦截并返回 403。
+- `permission_meta(...)` 显式声明优先级高于自动推导，语义动作（如 `trigger/restore/update_self`）建议显式标注。
+- 含静态后缀的路由（如 `/bulk-delete`、`/restore`）要写在动态路由（如 `/{id}`）之前，避免被错误匹配。
 
-### 3.5 角色权限保存约束
+### 3.6 角色权限保存约束
 - `assignable=false` 资源禁止进入角色权限树（例如 `self_service`）。
 - `require_read=true` 且资源存在 `read` 动作时，保存与解析阶段都要兜底：缺少 `read` 时清理其它动作。
 - 权限解析时必须做动作白名单清洗（防脏数据绕过）。
+- `self_service` 资源通过内置授权自动授予登录用户（不依赖角色 permissions 存储）。
 
 ---
 
@@ -139,6 +158,7 @@
 - 列表筛选/分页刷新时，保持 `hx-vals` 透传当前筛选条件和页码。
 - 返回 403 的 HTMX 请求，要由前端统一 toast 反馈（参考 `app/static/js/app.js`）。
 - 新增前端交互逻辑优先复用 `app/static/js/app.js`，避免散落内联脚本。
+- 批量操作推荐模式：`hx-post`/`hx-confirm` 写在批量按钮，配合 `hx-include="closest form"`；避免把 `hx-confirm` 挂在 `<form>` 上导致继承误伤其它按钮。
 
 ---
 
@@ -154,7 +174,7 @@
 ## 7. 操作日志规范
 - 关键页面访问与增删改操作需要记录日志。
 - 使用 `log_service.record_request(...)`，至少包含：
-  - `action`（create/read/update/delete）
+  - `action`（`create/read/update/delete/trigger/restore/update_self` 按实际语义填写）
   - `module`（如 rbac/admin_users）
   - `target`（操作对象）
   - `detail`（操作描述）

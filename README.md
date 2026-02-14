@@ -140,7 +140,7 @@ uv run python scripts/generate_admin_module.py inventory --name "库存管理" -
 可选参数：
 - `module`：模块标识，必须匹配 `^[a-z][a-z0-9_]{1,31}$`
 - `--name`：模块中文名（默认同 module）
-- `--group`：菜单分组 key（默认 `system`）
+- `--group`：权限/导航分组 key（默认 `system`）
 - `--url`：资源 URL（默认 `/admin/<module>`）
 - `--force`：覆盖已有文件
 - `--dry-run`：仅打印不落盘
@@ -154,7 +154,9 @@ uv run python scripts/generate_admin_module.py inventory --name "库存管理" -
 - `app/apps/admin/templates/partials/<module>_form.html`
 - `tests/unit/test_<module>_scaffold.py`
 - `app/apps/admin/registry_generated/<module>.json`
+- `app/apps/admin/nav_generated/<module>.json`
 - 自动更新 `app/models/__init__.py` 与 `app/db.py`，完成模型注册
+- 自动注入：左侧菜单、折叠菜单、顶部面包屑（无需手改 `base.html`）
 
 ### 3) 生成后你还需要手动做什么（必须）
 1. 在 `app/main.py` 引入并注册新控制器路由（`app.include_router(...)`）。
@@ -163,6 +165,7 @@ uv run python scripts/generate_admin_module.py inventory --name "库存管理" -
 4. 保持按钮权限与后端权限一致（只隐藏按钮不算完成）。
 5. 补充操作日志（至少 create/read/update/delete）。
 6. 做移动端和桌面端检查（尤其表格横向滚动）。
+7. 如需调整菜单分组/图标/命名，优先改 `app/apps/admin/nav_generated/<module>.json`。
 
 ### 4) RBAC 显式权限声明（强烈建议）
 - 推荐在路由上使用：

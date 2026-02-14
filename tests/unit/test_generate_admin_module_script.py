@@ -89,3 +89,14 @@ def test_render_controller_has_htmx_modal_error_strategy(scaffold_module) -> Non
     assert "HX-Retarget" in rendered
     assert "HX-Reswap" in rendered
     assert '@router.post("/demo_inventory/bulk-delete", response_class=HTMLResponse)' in rendered
+
+
+@pytest.mark.unit
+def test_render_nav_registry_contains_resource_and_prefix(scaffold_module) -> None:
+    """脚手架应输出导航注册文件，支持自动注入菜单与面包屑。"""
+
+    rendered = scaffold_module.render_nav_registry("demo_inventory", "示例模块", "system", "/admin/demo_inventory")
+
+    assert '"resource": "demo_inventory"' in rendered
+    assert '"group_key": "system"' in rendered
+    assert '"match_prefixes": [' in rendered

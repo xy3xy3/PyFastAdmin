@@ -43,6 +43,8 @@
 - 后端路由控制器：`app/apps/admin/controllers/`
 - 权限资源注册：`app/apps/admin/registry.py`
 - 脚手架扩展资源目录：`app/apps/admin/registry_generated/`
+- 导航与面包屑注册：`app/apps/admin/navigation.py`
+- 脚手架扩展导航目录：`app/apps/admin/nav_generated/`
 - 权限解析与鉴权：`app/services/permission_service.py`
 - 显式权限装饰器：`app/services/permission_decorator.py`
 - 统一字段校验：`app/services/validators.py`
@@ -135,6 +137,8 @@
 - `tests/unit/test_<module>_scaffold.py`
 - `app/apps/admin/registry_generated/<module>.json`
   - 默认包含：`mode=table` 与 CRUD `actions`
+- `app/apps/admin/nav_generated/<module>.json`
+  - 默认包含：`resource/url/match_prefixes`，用于自动注入菜单与面包屑
 - 自动更新：`app/models/__init__.py` 与 `app/db.py`
 
 ### 4.4 脚手架后必做事项
@@ -145,17 +149,14 @@
 - 检查按钮权限显示与后端 403 一致。
 - 检查日志字段是否满足审计要求。
 
-### 4.5 脚手架后手动接入菜单与 RBAC 权限树（必做）
+### 4.5 脚手架后接入菜单与 RBAC 权限树
 - **RBAC 权限树**：脚手架会生成 `app/apps/admin/registry_generated/<module>.json`，默认已含 `mode=table` + CRUD。
-- 若要进入已有权限分组，`group_key` 请使用基础分组 key（如 `security/accounts/system`）；否则会创建同名新分组（显示名默认等于 `group_key`）。
+- **导航/面包屑**：脚手架会生成 `app/apps/admin/nav_generated/<module>.json`，由 `navigation.py` 自动注入左侧菜单、折叠菜单与顶部面包屑。
+- 若要进入已有权限分组，`group_key` 请使用基础分组 key（如 `security`、`accounts`、`system`）；否则会创建同名新分组（显示名默认等于 `group_key`）。
 - 若需自定义分组中文名/排序，手动调整 `app/apps/admin/registry.py` 的 `BASE_ADMIN_TREE`（新增或重排 group）。
-- **左侧菜单不会自动生成**：必须手动修改 `app/apps/admin/templates/base.html`，同步补齐以下区域：
-  - `x-data.menuOpen` 默认展开规则（按路由前缀）
-  - 桌面展开菜单（`sider-parent` + `sider-tree`）
-  - 桌面折叠菜单（`compact-nav` + `compact-flyout`）
-  - 面包屑 `crumb_parent/crumb_title` 映射
-- 菜单权限判断统一使用 `perm.<resource>.read`（或语义动作），按钮权限在业务页面内继续用 `perm['create']` / `perm['update']` / `perm['delete']` 下标写法。
-- 新菜单接入后，必须人工验证：有 `read` 可见菜单、无 `read` 菜单隐藏、直连接口仍由后端返回 403。
+- 导航个性化优先改 `nav_generated/<module>.json`（如图标、别名、匹配前缀）；只有跨模块全局策略才改 `navigation.py`。
+- 菜单显隐由 `read` 动作自动控制，按钮权限在业务页面内继续用 `perm['create']` / `perm['update']` / `perm['delete']` 下标写法。
+- 新模块接入后，必须人工验证：有 `read` 可见菜单、无 `read` 菜单隐藏、直连接口仍由后端返回 403。
 
 ---
 

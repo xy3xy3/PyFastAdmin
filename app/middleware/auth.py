@@ -8,6 +8,7 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
 from starlette.responses import HTMLResponse, RedirectResponse, Response
 
+from app.apps.admin import navigation
 from app.services import csrf_service, permission_service
 
 
@@ -68,6 +69,10 @@ class AdminAuthMiddleware(BaseHTTPMiddleware):
                 return RedirectResponse(url=f"/admin/login?next={next_url}", status_code=302)
 
             permission_map = await permission_service.resolve_permission_map(request)
+            request.state.admin_nav = navigation.build_navigation_context(
+                path=path,
+                permission_flags=request.state.permission_flags,
+            )
             if not request.state.current_admin_model:
                 request.session.clear()
                 next_url = request.url.path

@@ -18,6 +18,7 @@ PAGES_DIR = ROOT / "app/apps/admin/templates/pages"
 PARTIALS_DIR = ROOT / "app/apps/admin/templates/partials"
 TESTS_DIR = ROOT / "tests/unit"
 REGISTRY_DIR = ROOT / "app/apps/admin/registry_generated"
+NAV_REGISTRY_DIR = ROOT / "app/apps/admin/nav_generated"
 MODELS_INIT_FILE = ROOT / "app/models/__init__.py"
 DB_FILE = ROOT / "app/db.py"
 
@@ -812,6 +813,15 @@ def test_{module}_registry_generated_contains_crud_actions() -> None:
     assert payload["node"]["key"] == "{module}"
     assert payload["node"]["mode"] == "table"
     assert payload["node"]["actions"] == ["create", "read", "update", "delete"]
+
+
+@pytest.mark.unit
+def test_{module}_nav_generated_contains_resource_binding() -> None:
+    payload = json.loads(Path("app/apps/admin/nav_generated/{module}.json").read_text(encoding="utf-8"))
+
+    assert payload["group_key"]
+    assert payload["node"]["resource"] == "{module}"
+    assert payload["node"]["menu_visible"] is True
 '''
 
 
@@ -826,6 +836,23 @@ def render_registry(module: str, title: str, group: str, url: str) -> str:
             "url": url,
             "mode": "table",
             "actions": ["create", "read", "update", "delete"],
+        },
+    }
+    return json.dumps(payload, ensure_ascii=False, indent=2) + "\n"
+
+
+def render_nav_registry(module: str, title: str, group: str, url: str) -> str:
+    """渲染导航扩展节点 JSON。"""
+
+    payload = {
+        "group_key": group,
+        "node": {
+            "resource": module,
+            "name": title,
+            "url": url,
+            "icon": "fa-solid fa-puzzle-piece",
+            "menu_visible": True,
+            "match_prefixes": [url],
         },
     }
     return json.dumps(payload, ensure_ascii=False, indent=2) + "\n"
@@ -851,6 +878,7 @@ def main() -> None:
         PARTIALS_DIR / f"{module}_form.html": render_form_partial(module, title),
         TESTS_DIR / f"test_{module}_scaffold.py": render_test(module),
         REGISTRY_DIR / f"{module}.json": render_registry(module, title, group, url),
+        NAV_REGISTRY_DIR / f"{module}.json": render_nav_registry(module, title, group, url),
     }
 
     for path, content in files.items():

@@ -5,14 +5,16 @@
 ## 1) 注册资源
 - 在 `app/apps/admin/registry.py` 的基础树新增资源，或在 `app/apps/admin/registry_generated/*.json` 追加节点。
 - CRUD 脚手架生成后会自动产出 `app/apps/admin/registry_generated/<module>.json`，请优先检查该文件的 `group_key/key/url/mode/actions` 是否符合业务。
+- 脚手架也会同步生成 `app/apps/admin/nav_generated/<module>.json`，用于菜单图标/别名/匹配前缀扩展。
 - 每个资源必须声明 `key/name/url/actions`，`actions` 建议固定为 `create/read/update/delete`。
 - 新增后请确认 `permission_service.build_permission_flags` 能自动识别到资源。
-- 若需把资源挂到已有权限分组，`group_key` 使用 `security/accounts/system`；若使用新 key，会在权限树里生成新分组（分组名默认等于 key，必要时到 `app/apps/admin/registry.py` 的 `BASE_ADMIN_TREE` 手动补中文名和排序）。
+- 若需把资源挂到已有权限分组，`group_key` 使用 `security`、`accounts`、`system` 之一；若使用新 key，会在权限树里生成新分组（分组名默认等于 key，必要时到 `app/apps/admin/registry.py` 的 `BASE_ADMIN_TREE` 手动补中文名和排序）。
 
-## 2) 手动接入侧边菜单（脚手架不会自动做）
-- 新模块要在 `app/apps/admin/templates/base.html` 手动加菜单入口，否则即使有权限树节点也不会在左侧显示。
-- 需要同步修改 4 处：`x-data.menuOpen` 展开条件、桌面展开菜单(`sider-tree`)、桌面折叠菜单(`compact-flyout`)、面包屑 `crumb_parent/crumb_title`。
-- 菜单显隐按 `perm.<resource>.read` 控制；无 read 权限时菜单必须隐藏。
+## 2) 自动注入侧边菜单与面包屑
+- 导航由 `app/apps/admin/navigation.py` 统一构建，默认从 `registry.py + registry_generated/*.json` 自动推导。
+- 脚手架产物 `app/apps/admin/nav_generated/<module>.json` 会自动注入左侧菜单、折叠菜单和顶部面包屑，不需要再改 `base.html`。
+- 菜单显隐按资源 `read` 动作自动控制；无 `read` 时菜单必须隐藏。
+- 需要个性化时优先改 `nav_generated/<module>.json`（图标、名称、匹配前缀），而不是散改模板。
 
 ## 3) 新增路由
 - 控制器放在 `app/apps/admin/controllers/`，路由统一 `prefix="/admin"`。

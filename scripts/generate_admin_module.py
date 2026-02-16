@@ -158,43 +158,77 @@ def render_controller(module: str, title: str) -> str:
 
 from __future__ import annotations
 
-import json
-from pathlib import Path
-from typing import Any
+from typing import Any, Mapping
 
-from fastapi import APIRouter, HTTPException, Request
-from fastapi.responses import HTMLResponse
-from fastapi.templating import Jinja2Templates
+from fasthx import page as fasthx_page
+from fastapi import APIRouter, HTTPException, Request, Response
 
+from app.apps.admin.rendering import (
+    TemplatePayload,
+    base_context,
+    build_pagination,
+    jinja,
+    parse_positive_int,
+    read_request_values,
+    render_template_payload,
+    set_form_error_status,
+    set_hx_swap_headers,
+)
 from app.services import {module}_service, log_service, permission_decorator
 
-BASE_DIR = Path(__file__).resolve().parents[1]
-TEMPLATES_DIR = BASE_DIR / "templates"
-
-templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
 router = APIRouter(prefix="/admin")
+PAGE_SIZE = 10
 
 
-def base_context(request: Request) -> dict[str, Any]:
-    """构建模板基础上下文。"""
+def parse_filters(values: Mapping[str, Any]) -> tuple[dict[str, str], int]:
+    """解析列表筛选参数。"""
+
+    search_q = str(values.get("search_q") or values.get("q") or "").strip()
+    page = parse_positive_int(values.get("page"), default=1)
+    return {{"search_q": search_q}}, page
+
+
+def filter_items(items: list[Any], filters: dict[str, str]) -> list[Any]:
+    """按关键字过滤列表。"""
+
+    search_q = filters["search_q"].lower()
+    if not search_q:
+        return items
+
+    filtered: list[Any] = []
+    for item in items:
+        item_name = str(getattr(item, "name", "")).lower()
+        item_desc = str(getattr(item, "description", "")).lower()
+        item_id = str(getattr(item, "id", "")).lower()
+        if search_q in item_name or search_q in item_desc or search_q in item_id:
+            filtered.append(item)
+    return filtered
+
+
+async def build_table_context(request: Request, filters: dict[str, str], page: int) -> dict[str, Any]:
+    """构建列表表格上下文。"""
+
+    items = await {module}_service.list_items()
+    filtered_items = filter_items(items, filters)
+    pagination = build_pagination(len(filtered_items), page, PAGE_SIZE)
+    start = (pagination["page"] - 1) * PAGE_SIZE
+    paged_items = filtered_items[start : start + PAGE_SIZE]
 
     return {{
-        "request": request,
-        "current_admin": request.session.get("admin_name"),
+        **base_context(request),
+        "items": paged_items,
+        "filters": filters,
+        "pagination": pagination,
     }}
 
 
-def _is_htmx_request(request: Request) -> bool:
-    """判断是否为 HTMX 请求，用于区分表单错误返回策略。"""
-
-    return request.headers.get("hx-request", "").strip().lower() == "true"
-
-
-@router.get("/{module}", response_class=HTMLResponse)
-async def {module}_page(request: Request) -> HTMLResponse:
+@router.get("/{module}")
+@jinja.page("pages/{module}.html")
+async def {module}_page(request: Request) -> dict[str, Any]:
     """模块列表页。"""
 
-    items = await {module}_service.list_items()
+    filters, page = parse_filters(request.query_params)
+    context = await build_table_context(request, filters, page)
     await log_service.record_request(
         request,
         action="read",
@@ -202,34 +236,49 @@ async def {module}_page(request: Request) -> HTMLResponse:
         target="{title}",
         detail="访问模块列表页面",
     )
-    return templates.TemplateResponse("pages/{module}.html", {{**base_context(request), "items": items}})
+    return context
 
 
-@router.get("/{module}/table", response_class=HTMLResponse)
-async def {module}_table(request: Request) -> HTMLResponse:
+@router.get("/{module}/table")
+@jinja.page("partials/{module}_table.html")
+async def {module}_table(request: Request) -> dict[str, Any]:
     """模块表格 partial。"""
 
-    items = await {module}_service.list_items()
-    return templates.TemplateResponse("partials/{module}_table.html", {{**base_context(request), "items": items}})
+    filters, page = parse_filters(request.query_params)
+    return await build_table_context(request, filters, page)
 
 
-@router.get("/{module}/new", response_class=HTMLResponse)
-async def {module}_new(request: Request) -> HTMLResponse:
+@router.get("/{module}/new")
+@jinja.page("partials/{module}_form.html")
+async def {module}_new(request: Request) -> dict[str, Any]:
     """新建弹窗。"""
 
-    return templates.TemplateResponse(
-        "partials/{module}_form.html",
-        {{**base_context(request), "mode": "create", "action": "/admin/{module}", "errors": [], "form": {{}}}},
-    )
+    filters, page = parse_filters(request.query_params)
+    return {{
+        **base_context(request),
+        "mode": "create",
+        "action": "/admin/{module}",
+        "errors": [],
+        "form": {{}},
+        "filters": filters,
+        "page": page,
+    }}
 
 
-@router.post("/{module}", response_class=HTMLResponse)
+@router.post("/{module}")
 @permission_decorator.permission_meta("{module}", "create")
-async def {module}_create(request: Request) -> HTMLResponse:
+@fasthx_page(render_template_payload)
+async def {module}_create(request: Request, response: Response) -> TemplatePayload:
     """创建数据（脚手架模板，需按业务补充校验）。"""
 
+    request_values = await read_request_values(request)
+    filters, page = parse_filters(request_values)
     form_data = await request.form()
-    payload = dict(form_data)
+    payload = {{
+        "name": str(form_data.get("name") or "").strip(),
+        "description": str(form_data.get("description") or "").strip(),
+        "status": str(form_data.get("status") or "enabled").strip(),
+    }}
 
     errors: list[str] = []
     if not str(payload.get("name", "")).strip():
@@ -241,9 +290,11 @@ async def {module}_create(request: Request) -> HTMLResponse:
             "action": "/admin/{module}",
             "errors": errors,
             "form": payload,
+            "filters": filters,
+            "page": page,
         }}
-        error_status = 200 if _is_htmx_request(request) else 422
-        return templates.TemplateResponse("partials/{module}_form.html", context, status_code=error_status)
+        set_form_error_status(response, request)
+        return TemplatePayload(template="partials/{module}_form.html", context=context)
 
     created = await {module}_service.create_item(payload)
     await log_service.record_request(
@@ -255,42 +306,47 @@ async def {module}_create(request: Request) -> HTMLResponse:
         detail="创建记录",
     )
 
-    items = await {module}_service.list_items()
-    response = templates.TemplateResponse("partials/{module}_table.html", {{**base_context(request), "items": items}})
-    response.headers["HX-Retarget"] = "#{module}-table"
-    response.headers["HX-Reswap"] = "outerHTML"
-    response.headers["HX-Trigger"] = json.dumps(
-        {{"rbac-toast": {{"title": "已创建", "message": "记录创建成功", "variant": "success"}}, "rbac-close": True}},
-        ensure_ascii=True,
+    context = await build_table_context(request, filters, page)
+    set_hx_swap_headers(
+        response,
+        target="#{module}-table",
+        trigger={{
+            "rbac-toast": {{"title": "已创建", "message": "记录创建成功", "variant": "success"}},
+            "rbac-close": True,
+        }},
     )
-    return response
+    return TemplatePayload(template="partials/{module}_table.html", context=context)
 
 
-@router.get("/{module}/{{item_id}}/edit", response_class=HTMLResponse)
-async def {module}_edit(request: Request, item_id: str) -> HTMLResponse:
+@router.get("/{module}/{{item_id}}/edit")
+@jinja.page("partials/{module}_form.html")
+async def {module}_edit(request: Request, item_id: str) -> dict[str, Any]:
     """编辑弹窗。"""
 
     item = await {module}_service.get_item(item_id)
     if not item:
         raise HTTPException(status_code=404, detail="记录不存在")
 
-    return templates.TemplateResponse(
-        "partials/{module}_form.html",
-        {{
-            **base_context(request),
-            "mode": "edit",
-            "action": f"/admin/{module}/{{item_id}}",
-            "errors": [],
-            "form": item,
-        }},
-    )
+    filters, page = parse_filters(request.query_params)
+    return {{
+        **base_context(request),
+        "mode": "edit",
+        "action": f"/admin/{module}/{{item_id}}",
+        "errors": [],
+        "form": item,
+        "filters": filters,
+        "page": page,
+    }}
 
 
-@router.post("/{module}/bulk-delete", response_class=HTMLResponse)
+@router.post("/{module}/bulk-delete")
 @permission_decorator.permission_meta("{module}", "delete")
-async def {module}_bulk_delete(request: Request) -> HTMLResponse:
+@jinja.page("partials/{module}_table.html")
+async def {module}_bulk_delete(request: Request, response: Response) -> dict[str, Any]:
     """批量删除数据。"""
 
+    request_values = await read_request_values(request)
+    filters, page = parse_filters(request_values)
     form_data = await request.form()
     selected_ids = [str(item).strip() for item in form_data.getlist("selected_ids") if str(item).strip()]
     selected_ids = list(dict.fromkeys(selected_ids))
@@ -314,11 +370,6 @@ async def {module}_bulk_delete(request: Request) -> HTMLResponse:
             detail="批量删除记录",
         )
 
-    items = await {module}_service.list_items()
-    response = templates.TemplateResponse("partials/{module}_table.html", {{**base_context(request), "items": items}})
-    response.headers["HX-Retarget"] = "#{module}-table"
-    response.headers["HX-Reswap"] = "outerHTML"
-
     if deleted_count == 0:
         message = "未删除任何记录，请先勾选数据"
     elif skipped_count > 0:
@@ -326,24 +377,32 @@ async def {module}_bulk_delete(request: Request) -> HTMLResponse:
     else:
         message = f"已批量删除 {{deleted_count}} 条记录"
 
-    response.headers["HX-Trigger"] = json.dumps(
-        {{"rbac-toast": {{"title": "批量删除完成", "message": message, "variant": "warning"}}}},
-        ensure_ascii=True,
+    set_hx_swap_headers(
+        response,
+        target="#{module}-table",
+        trigger={{"rbac-toast": {{"title": "批量删除完成", "message": message, "variant": "warning"}}}},
     )
-    return response
+    return await build_table_context(request, filters, page)
 
 
-@router.post("/{module}/{{item_id}}", response_class=HTMLResponse)
+@router.post("/{module}/{{item_id}}")
 @permission_decorator.permission_meta("{module}", "update")
-async def {module}_update(request: Request, item_id: str) -> HTMLResponse:
+@fasthx_page(render_template_payload)
+async def {module}_update(request: Request, response: Response, item_id: str) -> TemplatePayload:
     """更新数据（脚手架模板，需按业务补充校验）。"""
 
+    request_values = await read_request_values(request)
+    filters, page = parse_filters(request_values)
     item = await {module}_service.get_item(item_id)
     if not item:
         raise HTTPException(status_code=404, detail="记录不存在")
 
     form_data = await request.form()
-    payload = dict(form_data)
+    payload = {{
+        "name": str(form_data.get("name") or "").strip(),
+        "description": str(form_data.get("description") or "").strip(),
+        "status": str(form_data.get("status") or "enabled").strip(),
+    }}
 
     errors: list[str] = []
     if not str(payload.get("name", "")).strip():
@@ -355,9 +414,11 @@ async def {module}_update(request: Request, item_id: str) -> HTMLResponse:
             "action": f"/admin/{module}/{{item_id}}",
             "errors": errors,
             "form": payload,
+            "filters": filters,
+            "page": page,
         }}
-        error_status = 200 if _is_htmx_request(request) else 422
-        return templates.TemplateResponse("partials/{module}_form.html", context, status_code=error_status)
+        set_form_error_status(response, request)
+        return TemplatePayload(template="partials/{module}_form.html", context=context)
 
     await {module}_service.update_item(item, payload)
     await log_service.record_request(
@@ -369,22 +430,26 @@ async def {module}_update(request: Request, item_id: str) -> HTMLResponse:
         detail="更新记录",
     )
 
-    items = await {module}_service.list_items()
-    response = templates.TemplateResponse("partials/{module}_table.html", {{**base_context(request), "items": items}})
-    response.headers["HX-Retarget"] = "#{module}-table"
-    response.headers["HX-Reswap"] = "outerHTML"
-    response.headers["HX-Trigger"] = json.dumps(
-        {{"rbac-toast": {{"title": "已更新", "message": "记录更新成功", "variant": "success"}}, "rbac-close": True}},
-        ensure_ascii=True,
+    context = await build_table_context(request, filters, page)
+    set_hx_swap_headers(
+        response,
+        target="#{module}-table",
+        trigger={{
+            "rbac-toast": {{"title": "已更新", "message": "记录更新成功", "variant": "success"}},
+            "rbac-close": True,
+        }},
     )
-    return response
+    return TemplatePayload(template="partials/{module}_table.html", context=context)
 
 
-@router.delete("/{module}/{{item_id}}", response_class=HTMLResponse)
+@router.delete("/{module}/{{item_id}}")
 @permission_decorator.permission_meta("{module}", "delete")
-async def {module}_delete(request: Request, item_id: str) -> HTMLResponse:
+@jinja.page("partials/{module}_table.html")
+async def {module}_delete(request: Request, response: Response, item_id: str) -> dict[str, Any]:
     """删除数据。"""
 
+    request_values = await read_request_values(request)
+    filters, page = parse_filters(request_values)
     item = await {module}_service.get_item(item_id)
     if not item:
         raise HTTPException(status_code=404, detail="记录不存在")
@@ -399,15 +464,12 @@ async def {module}_delete(request: Request, item_id: str) -> HTMLResponse:
         detail="删除记录",
     )
 
-    items = await {module}_service.list_items()
-    response = templates.TemplateResponse("partials/{module}_table.html", {{**base_context(request), "items": items}})
-    response.headers["HX-Retarget"] = "#{module}-table"
-    response.headers["HX-Reswap"] = "outerHTML"
-    response.headers["HX-Trigger"] = json.dumps(
-        {{"rbac-toast": {{"title": "已删除", "message": "记录已删除", "variant": "warning"}}}},
-        ensure_ascii=True,
+    set_hx_swap_headers(
+        response,
+        target="#{module}-table",
+        trigger={{"rbac-toast": {{"title": "已删除", "message": "记录已删除", "variant": "warning"}}}},
     )
-    return response
+    return await build_table_context(request, filters, page)
 '''
 
 def render_model(module: str, class_name: str) -> str:
@@ -527,11 +589,47 @@ def render_page(module: str, title: str) -> str:
 
 {{% block content %}}
 <div class="space-y-4">
-  <section class="card p-5">
+  <section
+    class="card p-5"
+    x-data='{{{{ {{"search_q": filters.search_q, "page": pagination.page}}|tojson }}}}'
+  >
     <div class="flex items-center justify-between gap-3">
-      <h1 class="text-lg font-semibold text-slate-900">{title}</h1>
-      <p class="text-sm text-slate-500">脚手架已生成，请按业务补充筛选与统计。</p>
+      <h1 class="text-lg font-semibold text-slate-900">查询条件</h1>
+      <p class="text-sm text-slate-500">支持关键字搜索（名称/描述/ID）</p>
     </div>
+
+    <form
+      id="{module}-search-form"
+      class="mt-4 grid gap-4 md:grid-cols-12"
+      hx-get="/admin/{module}/table"
+      hx-target="#{module}-table"
+      hx-swap="outerHTML"
+      hx-indicator="#global-indicator"
+      x-on:submit="page = 1"
+    >
+      <input type="hidden" name="page" x-model="page" />
+
+      <div class="md:col-span-8">
+        <label class="label">关键词</label>
+        <input
+          name="search_q"
+          x-model="search_q"
+          class="input"
+          placeholder="请输入名称、描述或 ID"
+        />
+      </div>
+
+      <div class="md:col-span-4 flex flex-wrap items-end justify-end gap-3">
+        <button
+          type="button"
+          class="btn-ghost"
+          x-on:click="search_q=''; page=1; $nextTick(() => $el.form.requestSubmit())"
+        >
+          重置
+        </button>
+        <button type="submit" class="btn-primary">搜索</button>
+      </div>
+    </form>
   </section>
 
   <section>
@@ -551,7 +649,7 @@ def render_table(module: str, title: str) -> str:
   <div class="flex flex-wrap items-center justify-between gap-3">
     <div>
       <h2 class="text-lg font-semibold text-slate-900">{title}列表</h2>
-      <p class="mt-1 text-sm text-slate-500">共 {{{{ items | length }}}} 条记录</p>
+      <p class="mt-1 text-sm text-slate-500">共 {{{{ pagination.total }}}} 条记录</p>
     </div>
 
     <div class="flex items-center gap-2">
@@ -561,6 +659,7 @@ def render_table(module: str, title: str) -> str:
         hx-target="#{module}-table"
         hx-swap="outerHTML"
         hx-indicator="#global-indicator"
+        hx-vals='{{{{ {{"search_q": filters.search_q, "page": pagination.page}}|tojson }}}}'
         title="刷新"
         aria-label="刷新"
       >
@@ -573,6 +672,7 @@ def render_table(module: str, title: str) -> str:
           hx-target="#modal-body"
           hx-swap="innerHTML"
           hx-indicator="#global-indicator"
+          hx-vals='{{{{ {{"search_q": filters.search_q, "page": pagination.page}}|tojson }}}}'
           x-on:click="modalOpen = true"
         >
           新建
@@ -586,6 +686,8 @@ def render_table(module: str, title: str) -> str:
       class="mt-4 space-y-4 pb-20"
     >
       <input type="hidden" name="csrf_token" value="{{{{ request.state.csrf_token or '' }}}}" />
+      <input type="hidden" name="search_q" value="{{{{ filters.search_q }}}}" />
+      <input type="hidden" name="page" value="{{{{ pagination.page }}}}" />
 
       <div class="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-slate-200 bg-slate-50/60 p-3">
         <p class="text-xs text-slate-500">已选 <span data-bulk-count>0</span> 项</p>
@@ -622,6 +724,7 @@ def render_table(module: str, title: str) -> str:
                         hx-target="#modal-body"
                         hx-swap="innerHTML"
                         hx-indicator="#global-indicator"
+                        hx-vals='{{{{ {{"search_q": filters.search_q, "page": pagination.page}}|tojson }}}}'
                         x-on:click="modalOpen = true"
                       >
                         编辑
@@ -636,6 +739,7 @@ def render_table(module: str, title: str) -> str:
                         hx-swap="outerHTML"
                         hx-confirm="确认删除该记录吗？"
                         hx-indicator="#global-indicator"
+                        hx-vals='{{{{ {{"search_q": filters.search_q, "page": pagination.page}}|tojson }}}}'
                       >
                         删除
                       </button>
@@ -704,6 +808,7 @@ def render_table(module: str, title: str) -> str:
                       hx-target="#modal-body"
                       hx-swap="innerHTML"
                       hx-indicator="#global-indicator"
+                      hx-vals='{{{{ {{"search_q": filters.search_q, "page": pagination.page}}|tojson }}}}'
                       x-on:click="modalOpen = true"
                     >
                       编辑
@@ -721,6 +826,47 @@ def render_table(module: str, title: str) -> str:
       </table>
     </div>
   {{% endif %}}
+
+  <div class="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-slate-100 pt-4">
+    <p class="text-xs text-slate-500">显示 {{{{ pagination.start_item }}}} - {{{{ pagination.end_item }}}} / {{{{ pagination.total }}}}</p>
+
+    <div class="flex flex-wrap items-center gap-2">
+      <button
+        class="btn-ghost px-3 {{% if not pagination.has_prev %}}opacity-50 pointer-events-none{{% endif %}}"
+        hx-get="/admin/{module}/table"
+        hx-target="#{module}-table"
+        hx-swap="outerHTML"
+        hx-indicator="#global-indicator"
+        hx-vals='{{{{ {{"search_q": filters.search_q, "page": pagination.prev_page}}|tojson }}}}'
+        {{% if not pagination.has_prev %}}disabled{{% endif %}}
+      >
+        上一页
+      </button>
+      {{% for p in pagination.pages %}}
+        <button
+          class="{{% if p == pagination.page %}}btn-primary{{% else %}}btn-ghost{{% endif %}} px-3"
+          hx-get="/admin/{module}/table"
+          hx-target="#{module}-table"
+          hx-swap="outerHTML"
+          hx-indicator="#global-indicator"
+          hx-vals='{{{{ {{"search_q": filters.search_q, "page": p}}|tojson }}}}'
+        >
+          {{{{ p }}}}
+        </button>
+      {{% endfor %}}
+      <button
+        class="btn-ghost px-3 {{% if not pagination.has_next %}}opacity-50 pointer-events-none{{% endif %}}"
+        hx-get="/admin/{module}/table"
+        hx-target="#{module}-table"
+        hx-swap="outerHTML"
+        hx-indicator="#global-indicator"
+        hx-vals='{{{{ {{"search_q": filters.search_q, "page": pagination.next_page}}|tojson }}}}'
+        {{% if not pagination.has_next %}}disabled{{% endif %}}
+      >
+        下一页
+      </button>
+    </div>
+  </div>
 </div>
 '''
 
@@ -745,6 +891,8 @@ def render_form_partial(module: str, title: str) -> str:
     hx-indicator="#modal-indicator"
   >
     <input type="hidden" name="csrf_token" value="{{{{ request.state.csrf_token or '' }}}}" />
+    <input type="hidden" name="search_q" value="{{{{ filters.search_q if filters is defined else '' }}}}" />
+    <input type="hidden" name="page" value="{{{{ page if page is defined else 1 }}}}" />
 
     <div class="space-y-4 overflow-y-auto pr-1" style="min-height: 0; flex: 1;">
       {{% if errors %}}

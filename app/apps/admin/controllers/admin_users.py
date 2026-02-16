@@ -2,39 +2,26 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
-import json
-from datetime import datetime
-from pathlib import Path
 from typing import Any, Mapping
 
 from beanie import PydanticObjectId
 from fasthx import page as fasthx_page
-from fasthx.jinja import Jinja
 from fastapi import APIRouter, Form, HTTPException, Request, Response
-from fastapi.templating import Jinja2Templates
 
+from app.apps.admin.rendering import (
+    TemplatePayload,
+    base_context,
+    build_pagination,
+    jinja,
+    parse_positive_int,
+    read_request_values,
+    render_template_payload,
+    set_form_error_status,
+    set_hx_swap_headers,
+)
 from app.services import admin_user_service, auth_service, log_service, permission_decorator, role_service, validators
 
-BASE_DIR = Path(__file__).resolve().parents[1]
-TEMPLATES_DIR = BASE_DIR / "templates"
-
-templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
-jinja = Jinja(templates)
 router = APIRouter(prefix="/admin")
-
-
-def fmt_dt(value: datetime | None) -> str:
-    """格式化日期时间，统一页面展示精度。"""
-
-    if not value:
-        return ""
-    if value.tzinfo is None:
-        return value.strftime("%Y-%m-%d %H:%M")
-    return value.astimezone().strftime("%Y-%m-%d %H:%M")
-
-
-templates.env.filters["fmt_dt"] = fmt_dt
 
 STATUS_META: dict[str, dict[str, str]] = {
     "enabled": {"label": "启用", "color": "#2f855a"},
@@ -48,44 +35,6 @@ ADMIN_SORT_OPTIONS: dict[str, str] = {
 }
 
 ADMIN_PAGE_SIZE = 10
-
-
-@dataclass(frozen=True, slots=True)
-class AdminUsersTemplatePayload:
-    """管理员模块模板渲染载体。"""
-
-    template: str
-    context: dict[str, Any]
-
-
-def render_admin_users_template(
-    result: AdminUsersTemplatePayload,
-    *,
-    context: dict[str, Any],
-    request: Request,
-) -> str:
-    """按路由返回的模板信息渲染 HTML。"""
-
-    rendered = templates.TemplateResponse(
-        name=result.template,
-        context=result.context,
-        request=request,
-    )
-    return bytes(rendered.body).decode(rendered.charset)
-
-
-def base_context(request: Request) -> dict[str, Any]:
-    """构建管理员模块模板基础上下文。"""
-
-    return {
-        "request": request,
-        "current_admin": request.session.get("admin_name"),
-    }
-
-
-def _is_htmx_request(request: Request) -> bool:
-    """判断是否为 HTMX 请求，用于区分表单错误返回策略。"""
-    return request.headers.get("hx-request", "").strip().lower() == "true"
 
 
 def build_form_data(values: dict[str, Any]) -> dict[str, Any]:
@@ -125,16 +74,6 @@ def form_errors(values: dict[str, Any], is_create: bool, role_slugs: set[str]) -
     return errors
 
 
-def parse_positive_int(value: Any, default: int = 1) -> int:
-    """安全解析正整数参数。"""
-
-    try:
-        parsed = int(str(value))
-    except (TypeError, ValueError):
-        return default
-    return parsed if parsed > 0 else default
-
-
 def parse_admin_filters(values: Mapping[str, Any]) -> tuple[dict[str, str], int]:
     """解析管理员列表筛选条件。"""
 
@@ -160,37 +99,6 @@ def parse_admin_filters(values: Mapping[str, Any]) -> tuple[dict[str, str], int]
     )
 
 
-def build_pagination(total: int, page: int, page_size: int) -> dict[str, Any]:
-    """构建分页结构，供模板渲染。"""
-
-    total_pages = max((total + page_size - 1) // page_size, 1)
-    current = min(max(page, 1), total_pages)
-    start_page = max(current - 2, 1)
-    end_page = min(start_page + 4, total_pages)
-    start_page = max(end_page - 4, 1)
-
-    if total == 0:
-        start_item = 0
-        end_item = 0
-    else:
-        start_item = (current - 1) * page_size + 1
-        end_item = min(current * page_size, total)
-
-    return {
-        "page": current,
-        "page_size": page_size,
-        "total": total,
-        "total_pages": total_pages,
-        "has_prev": current > 1,
-        "has_next": current < total_pages,
-        "prev_page": current - 1,
-        "next_page": current + 1,
-        "pages": list(range(start_page, end_page + 1)),
-        "start_item": start_item,
-        "end_item": end_item,
-    }
-
-
 def filter_admin_items(items: list[Any], filters: dict[str, str]) -> list[Any]:
     """按筛选条件过滤与排序管理员列表。"""
 
@@ -208,24 +116,6 @@ def filter_admin_items(items: list[Any], filters: dict[str, str]) -> list[Any]:
     else:
         filtered = sorted(filtered, key=lambda item: item.updated_at, reverse=True)
     return filtered
-
-
-async def read_request_values(request: Request) -> dict[str, str]:
-    """统一读取 Query + Form 参数，兼容 HTMX 请求。"""
-
-    values: dict[str, str] = {key: value for key, value in request.query_params.items()}
-    if request.method == "GET":
-        return values
-
-    content_type = request.headers.get("content-type", "")
-    if "application/x-www-form-urlencoded" not in content_type and "multipart/form-data" not in content_type:
-        return values
-
-    form_data = await request.form()
-    for key, value in form_data.items():
-        if isinstance(value, str):
-            values[key] = value
-    return values
 
 
 async def build_admin_table_context(
@@ -341,7 +231,7 @@ async def admin_users_edit(request: Request, item_id: PydanticObjectId) -> dict[
 
 @router.post("/users")
 @permission_decorator.permission_meta("admin_users", "create")
-@fasthx_page(render_admin_users_template)
+@fasthx_page(render_template_payload)
 async def admin_users_create(
     request: Request,
     response: Response,
@@ -351,7 +241,7 @@ async def admin_users_create(
     role_slug: str = Form("admin"),
     status: str = Form("enabled"),
     password: str = Form(""),
-) -> AdminUsersTemplatePayload:
+) -> TemplatePayload:
     """创建管理员。"""
 
     request_values = await read_request_values(request)
@@ -385,8 +275,8 @@ async def admin_users_create(
             "filters": filters,
             "page": page,
         }
-        response.status_code = 200 if _is_htmx_request(request) else 422
-        return AdminUsersTemplatePayload(
+        set_form_error_status(response, request)
+        return TemplatePayload(
             template="partials/admin_users_form.html",
             context=context,
         )
@@ -409,10 +299,10 @@ async def admin_users_create(
         detail=f"创建管理员账号 {created.username}",
     )
 
-    response.headers["HX-Retarget"] = "#admin-table"
-    response.headers["HX-Reswap"] = "outerHTML"
-    response.headers["HX-Trigger"] = json.dumps(
-        {
+    set_hx_swap_headers(
+        response,
+        target="#admin-table",
+        trigger={
             "admin-toast": {
                 "title": "已创建",
                 "message": "管理员账号已保存",
@@ -420,10 +310,9 @@ async def admin_users_create(
             },
             "rbac-close": True,
         },
-        ensure_ascii=True,
     )
     context = await build_admin_table_context(request, filters, page)
-    return AdminUsersTemplatePayload(
+    return TemplatePayload(
         template="partials/admin_users_table.html",
         context=context,
     )
@@ -473,9 +362,6 @@ async def admin_users_bulk_delete(request: Request, response: Response) -> dict[
             detail=f"批量删除管理员账号 {item.username}",
         )
 
-    response.headers["HX-Retarget"] = "#admin-table"
-    response.headers["HX-Reswap"] = "outerHTML"
-
     if deleted_count == 0:
         toast_message = "未删除任何账号，请先勾选记录"
     else:
@@ -487,22 +373,23 @@ async def admin_users_bulk_delete(request: Request, response: Response) -> dict[
         suffix = f"（{'，'.join(extras)}）" if extras else ""
         toast_message = f"已删除 {deleted_count} 条管理员账号{suffix}"
 
-    response.headers["HX-Trigger"] = json.dumps(
-        {
+    set_hx_swap_headers(
+        response,
+        target="#admin-table",
+        trigger={
             "admin-toast": {
                 "title": "批量删除完成",
                 "message": toast_message,
                 "variant": "warning",
             }
         },
-        ensure_ascii=True,
     )
     return await build_admin_table_context(request, filters, page)
 
 
 @router.post("/users/{item_id}")
 @permission_decorator.permission_meta("admin_users", "update")
-@fasthx_page(render_admin_users_template)
+@fasthx_page(render_template_payload)
 async def admin_users_update(
     request: Request,
     response: Response,
@@ -512,7 +399,7 @@ async def admin_users_update(
     role_slug: str = Form("admin"),
     status: str = Form("enabled"),
     password: str = Form(""),
-) -> AdminUsersTemplatePayload:
+) -> TemplatePayload:
     """更新管理员。"""
 
     request_values = await read_request_values(request)
@@ -547,8 +434,8 @@ async def admin_users_update(
             "filters": filters,
             "page": page,
         }
-        response.status_code = 200 if _is_htmx_request(request) else 422
-        return AdminUsersTemplatePayload(
+        set_form_error_status(response, request)
+        return TemplatePayload(
             template="partials/admin_users_form.html",
             context=context,
         )
@@ -572,10 +459,10 @@ async def admin_users_update(
     if str(item.id) == str(request.session.get("admin_id")):
         request.session["admin_name"] = item.display_name
 
-    response.headers["HX-Retarget"] = "#admin-table"
-    response.headers["HX-Reswap"] = "outerHTML"
-    response.headers["HX-Trigger"] = json.dumps(
-        {
+    set_hx_swap_headers(
+        response,
+        target="#admin-table",
+        trigger={
             "admin-toast": {
                 "title": "已更新",
                 "message": "管理员账号已修改",
@@ -583,10 +470,9 @@ async def admin_users_update(
             },
             "rbac-close": True,
         },
-        ensure_ascii=True,
     )
     context = await build_admin_table_context(request, filters, page)
-    return AdminUsersTemplatePayload(
+    return TemplatePayload(
         template="partials/admin_users_table.html",
         context=context,
     )
@@ -616,16 +502,15 @@ async def admin_users_delete(request: Request, response: Response, item_id: Pyda
         target_id=str(item.id),
         detail=f"删除管理员账号 {item.username}",
     )
-    response.headers["HX-Retarget"] = "#admin-table"
-    response.headers["HX-Reswap"] = "outerHTML"
-    response.headers["HX-Trigger"] = json.dumps(
-        {
+    set_hx_swap_headers(
+        response,
+        target="#admin-table",
+        trigger={
             "admin-toast": {
                 "title": "已删除",
                 "message": "管理员账号已移除",
                 "variant": "warning",
             }
         },
-        ensure_ascii=True,
     )
     return await build_admin_table_context(request, filters, page)

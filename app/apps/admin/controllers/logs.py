@@ -2,22 +2,20 @@
 
 from __future__ import annotations
 
-import json
-from datetime import datetime
-from pathlib import Path
 from typing import Any, Mapping
 
-from fasthx.jinja import Jinja
 from fastapi import APIRouter, HTTPException, Request, Response
-from fastapi.templating import Jinja2Templates
 
+from app.apps.admin.rendering import (
+    base_context,
+    build_pagination,
+    jinja,
+    parse_positive_int,
+    read_request_values,
+    set_hx_swap_headers,
+)
 from app.services import config_service, log_service, permission_decorator
 
-BASE_DIR = Path(__file__).resolve().parents[1]
-TEMPLATES_DIR = BASE_DIR / "templates"
-
-templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
-jinja = Jinja(templates)
 router = APIRouter(prefix="/admin")
 
 LOG_PAGE_SIZE = 15
@@ -26,38 +24,6 @@ LOG_SORT_OPTIONS: dict[str, str] = {
     "created_desc": "最新优先",
     "created_asc": "最早优先",
 }
-
-
-def fmt_dt(value: datetime | None) -> str:
-    """格式化日期时间，统一页面展示精度。"""
-
-    if not value:
-        return ""
-    if value.tzinfo is None:
-        return value.strftime("%Y-%m-%d %H:%M")
-    return value.astimezone().strftime("%Y-%m-%d %H:%M")
-
-
-templates.env.filters["fmt_dt"] = fmt_dt
-
-
-def base_context(request: Request) -> dict[str, Any]:
-    """构建日志模块模板基础上下文。"""
-
-    return {
-        "request": request,
-        "current_admin": request.session.get("admin_name"),
-    }
-
-
-def parse_positive_int(value: Any, default: int = 1) -> int:
-    """安全解析正整数参数，非法值回退到默认值。"""
-
-    try:
-        parsed = int(str(value))
-    except (TypeError, ValueError):
-        return default
-    return parsed if parsed > 0 else default
 
 
 def parse_log_filters(values: Mapping[str, Any]) -> tuple[dict[str, str], int]:
@@ -86,55 +52,6 @@ def parse_log_filters(values: Mapping[str, Any]) -> tuple[dict[str, str], int]:
         },
         page,
     )
-
-
-def build_pagination(total: int, page: int, page_size: int) -> dict[str, Any]:
-    """构建分页数据，供模板渲染页码和统计信息。"""
-
-    total_pages = max((total + page_size - 1) // page_size, 1)
-    current = min(max(page, 1), total_pages)
-    start_page = max(current - 2, 1)
-    end_page = min(start_page + 4, total_pages)
-    start_page = max(end_page - 4, 1)
-
-    if total == 0:
-        start_item = 0
-        end_item = 0
-    else:
-        start_item = (current - 1) * page_size + 1
-        end_item = min(current * page_size, total)
-
-    return {
-        "page": current,
-        "page_size": page_size,
-        "total": total,
-        "total_pages": total_pages,
-        "has_prev": current > 1,
-        "has_next": current < total_pages,
-        "prev_page": current - 1,
-        "next_page": current + 1,
-        "pages": list(range(start_page, end_page + 1)),
-        "start_item": start_item,
-        "end_item": end_item,
-    }
-
-
-async def read_request_values(request: Request) -> dict[str, str]:
-    """统一读取 Query + Form 参数，兼容 HTMX 请求。"""
-
-    values: dict[str, str] = {key: value for key, value in request.query_params.items()}
-    if request.method == "GET":
-        return values
-
-    content_type = request.headers.get("content-type", "")
-    if "application/x-www-form-urlencoded" not in content_type and "multipart/form-data" not in content_type:
-        return values
-
-    form_data = await request.form()
-    for key, value in form_data.items():
-        if isinstance(value, str):
-            values[key] = value
-    return values
 
 
 async def build_log_table_context(
@@ -209,17 +126,16 @@ async def logs_delete(request: Request, response: Response, log_id: str) -> dict
         detail=f"删除日志 {log_id}",
     )
 
-    response.headers["HX-Retarget"] = "#logs-table"
-    response.headers["HX-Reswap"] = "outerHTML"
-    response.headers["HX-Trigger"] = json.dumps(
-        {
+    set_hx_swap_headers(
+        response,
+        target="#logs-table",
+        trigger={
             "rbac-toast": {
                 "title": "已删除",
                 "message": "日志记录已删除",
                 "variant": "warning",
             }
         },
-        ensure_ascii=True,
     )
     return await build_log_table_context(request, filters, page)
 
@@ -255,9 +171,6 @@ async def logs_bulk_delete(request: Request, response: Response) -> dict[str, An
             detail=f"批量删除日志 {deleted_count} 条",
         )
 
-    response.headers["HX-Retarget"] = "#logs-table"
-    response.headers["HX-Reswap"] = "outerHTML"
-
     if deleted_count == 0:
         toast_message = "未删除任何日志，请先勾选记录"
     elif skipped_count > 0:
@@ -265,14 +178,15 @@ async def logs_bulk_delete(request: Request, response: Response) -> dict[str, An
     else:
         toast_message = f"已批量删除 {deleted_count} 条日志"
 
-    response.headers["HX-Trigger"] = json.dumps(
-        {
+    set_hx_swap_headers(
+        response,
+        target="#logs-table",
+        trigger={
             "rbac-toast": {
                 "title": "批量删除完成",
                 "message": toast_message,
                 "variant": "warning",
             }
         },
-        ensure_ascii=True,
     )
     return await build_log_table_context(request, filters, page)

@@ -2,14 +2,16 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 import json
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Mapping
 
 from beanie import PydanticObjectId
-from fastapi import APIRouter, Form, HTTPException, Request
-from fastapi.responses import HTMLResponse
+from fasthx import page as fasthx_page
+from fasthx.jinja import Jinja
+from fastapi import APIRouter, Form, HTTPException, Request, Response
 from fastapi.templating import Jinja2Templates
 
 from app.services import admin_user_service, auth_service, log_service, permission_decorator, role_service, validators
@@ -18,10 +20,13 @@ BASE_DIR = Path(__file__).resolve().parents[1]
 TEMPLATES_DIR = BASE_DIR / "templates"
 
 templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
+jinja = Jinja(templates)
 router = APIRouter(prefix="/admin")
 
 
 def fmt_dt(value: datetime | None) -> str:
+    """格式化日期时间，统一页面展示精度。"""
+
     if not value:
         return ""
     if value.tzinfo is None:
@@ -44,7 +49,34 @@ ADMIN_SORT_OPTIONS: dict[str, str] = {
 
 ADMIN_PAGE_SIZE = 10
 
+
+@dataclass(frozen=True, slots=True)
+class AdminUsersTemplatePayload:
+    """管理员模块模板渲染载体。"""
+
+    template: str
+    context: dict[str, Any]
+
+
+def render_admin_users_template(
+    result: AdminUsersTemplatePayload,
+    *,
+    context: dict[str, Any],
+    request: Request,
+) -> str:
+    """按路由返回的模板信息渲染 HTML。"""
+
+    rendered = templates.TemplateResponse(
+        name=result.template,
+        context=result.context,
+        request=request,
+    )
+    return bytes(rendered.body).decode(rendered.charset)
+
+
 def base_context(request: Request) -> dict[str, Any]:
+    """构建管理员模块模板基础上下文。"""
+
     return {
         "request": request,
         "current_admin": request.session.get("admin_name"),
@@ -57,6 +89,8 @@ def _is_htmx_request(request: Request) -> bool:
 
 
 def build_form_data(values: dict[str, Any]) -> dict[str, Any]:
+    """构建管理员表单默认值。"""
+
     return {
         "username": values.get("username", ""),
         "display_name": values.get("display_name", ""),
@@ -92,6 +126,8 @@ def form_errors(values: dict[str, Any], is_create: bool, role_slugs: set[str]) -
 
 
 def parse_positive_int(value: Any, default: int = 1) -> int:
+    """安全解析正整数参数。"""
+
     try:
         parsed = int(str(value))
     except (TypeError, ValueError):
@@ -100,6 +136,8 @@ def parse_positive_int(value: Any, default: int = 1) -> int:
 
 
 def parse_admin_filters(values: Mapping[str, Any]) -> tuple[dict[str, str], int]:
+    """解析管理员列表筛选条件。"""
+
     search_q = str(values.get("search_q") or values.get("q") or "").strip()
     search_role = str(values.get("search_role") or "").strip()
     search_status = str(values.get("search_status") or "").strip()
@@ -123,6 +161,8 @@ def parse_admin_filters(values: Mapping[str, Any]) -> tuple[dict[str, str], int]
 
 
 def build_pagination(total: int, page: int, page_size: int) -> dict[str, Any]:
+    """构建分页结构，供模板渲染。"""
+
     total_pages = max((total + page_size - 1) // page_size, 1)
     current = min(max(page, 1), total_pages)
     start_page = max(current - 2, 1)
@@ -152,6 +192,8 @@ def build_pagination(total: int, page: int, page_size: int) -> dict[str, Any]:
 
 
 def filter_admin_items(items: list[Any], filters: dict[str, str]) -> list[Any]:
+    """按筛选条件过滤与排序管理员列表。"""
+
     filtered = items
     if filters["search_role"]:
         filtered = [item for item in filtered if item.role_slug == filters["search_role"]]
@@ -169,6 +211,8 @@ def filter_admin_items(items: list[Any], filters: dict[str, str]) -> list[Any]:
 
 
 async def read_request_values(request: Request) -> dict[str, str]:
+    """统一读取 Query + Form 参数，兼容 HTMX 请求。"""
+
     values: dict[str, str] = {key: value for key, value in request.query_params.items()}
     if request.method == "GET":
         return values
@@ -189,6 +233,8 @@ async def build_admin_table_context(
     filters: dict[str, str],
     page: int,
 ) -> dict[str, Any]:
+    """构建管理员表格上下文。"""
+
     roles = await role_service.list_roles()
     role_map = {item.slug: item.name for item in roles}
     items = await admin_user_service.list_admins(filters["search_q"] or None)
@@ -208,8 +254,11 @@ async def build_admin_table_context(
     }
 
 
-@router.get("/users", response_class=HTMLResponse)
-async def admin_users_page(request: Request) -> HTMLResponse:
+@router.get("/users")
+@jinja.page("pages/admin_users.html")
+async def admin_users_page(request: Request) -> dict[str, Any]:
+    """管理员页面。"""
+
     filters, page = parse_admin_filters(request.query_params)
     context = await build_admin_table_context(request, filters, page)
     context["admin_sort_options"] = ADMIN_SORT_OPTIONS
@@ -220,18 +269,23 @@ async def admin_users_page(request: Request) -> HTMLResponse:
         target="管理员账号",
         detail="访问管理员管理页面",
     )
-    return templates.TemplateResponse("pages/admin_users.html", context)
+    return context
 
 
-@router.get("/users/table", response_class=HTMLResponse)
-async def admin_users_table(request: Request) -> HTMLResponse:
+@router.get("/users/table")
+@jinja.page("partials/admin_users_table.html")
+async def admin_users_table(request: Request) -> dict[str, Any]:
+    """管理员表格 partial。"""
+
     filters, page = parse_admin_filters(request.query_params)
-    context = await build_admin_table_context(request, filters, page)
-    return templates.TemplateResponse("partials/admin_users_table.html", context)
+    return await build_admin_table_context(request, filters, page)
 
 
-@router.get("/users/new", response_class=HTMLResponse)
-async def admin_users_new(request: Request) -> HTMLResponse:
+@router.get("/users/new")
+@jinja.page("partials/admin_users_form.html")
+async def admin_users_new(request: Request) -> dict[str, Any]:
+    """新建管理员弹窗。"""
+
     roles = await role_service.list_roles()
     default_slug = roles[0].slug if roles else "admin"
     form = build_form_data({"role_slug": default_slug})
@@ -247,11 +301,14 @@ async def admin_users_new(request: Request) -> HTMLResponse:
         "filters": filters,
         "page": page,
     }
-    return templates.TemplateResponse("partials/admin_users_form.html", context)
+    return context
 
 
-@router.get("/users/{item_id}/edit", response_class=HTMLResponse)
-async def admin_users_edit(request: Request, item_id: PydanticObjectId) -> HTMLResponse:
+@router.get("/users/{item_id}/edit")
+@jinja.page("partials/admin_users_form.html")
+async def admin_users_edit(request: Request, item_id: PydanticObjectId) -> dict[str, Any]:
+    """编辑管理员弹窗。"""
+
     item = await admin_user_service.get_admin(item_id)
     if not item:
         raise HTTPException(status_code=404, detail="账号不存在")
@@ -279,20 +336,24 @@ async def admin_users_edit(request: Request, item_id: PydanticObjectId) -> HTMLR
         "filters": filters,
         "page": page,
     }
-    return templates.TemplateResponse("partials/admin_users_form.html", context)
+    return context
 
 
-@router.post("/users", response_class=HTMLResponse)
+@router.post("/users")
 @permission_decorator.permission_meta("admin_users", "create")
+@fasthx_page(render_admin_users_template)
 async def admin_users_create(
     request: Request,
+    response: Response,
     username: str = Form(""),
     display_name: str = Form(""),
     email: str = Form(""),
     role_slug: str = Form("admin"),
     status: str = Form("enabled"),
     password: str = Form(""),
-) -> HTMLResponse:
+) -> AdminUsersTemplatePayload:
+    """创建管理员。"""
+
     request_values = await read_request_values(request)
     filters, page = parse_admin_filters(request_values)
     roles = await role_service.list_roles()
@@ -324,9 +385,10 @@ async def admin_users_create(
             "filters": filters,
             "page": page,
         }
-        error_status = 200 if _is_htmx_request(request) else 422
-        return templates.TemplateResponse(
-            "partials/admin_users_form.html", context, status_code=error_status
+        response.status_code = 200 if _is_htmx_request(request) else 422
+        return AdminUsersTemplatePayload(
+            template="partials/admin_users_form.html",
+            context=context,
         )
 
     payload = {
@@ -347,8 +409,6 @@ async def admin_users_create(
         detail=f"创建管理员账号 {created.username}",
     )
 
-    context = await build_admin_table_context(request, filters, page)
-    response = templates.TemplateResponse("partials/admin_users_table.html", context)
     response.headers["HX-Retarget"] = "#admin-table"
     response.headers["HX-Reswap"] = "outerHTML"
     response.headers["HX-Trigger"] = json.dumps(
@@ -362,12 +422,17 @@ async def admin_users_create(
         },
         ensure_ascii=True,
     )
-    return response
+    context = await build_admin_table_context(request, filters, page)
+    return AdminUsersTemplatePayload(
+        template="partials/admin_users_table.html",
+        context=context,
+    )
 
 
-@router.post("/users/bulk-delete", response_class=HTMLResponse)
+@router.post("/users/bulk-delete")
 @permission_decorator.permission_meta("admin_users", "delete")
-async def admin_users_bulk_delete(request: Request) -> HTMLResponse:
+@jinja.page("partials/admin_users_table.html")
+async def admin_users_bulk_delete(request: Request, response: Response) -> dict[str, Any]:
     """批量删除管理员账号。"""
 
     request_values = await read_request_values(request)
@@ -408,8 +473,6 @@ async def admin_users_bulk_delete(request: Request) -> HTMLResponse:
             detail=f"批量删除管理员账号 {item.username}",
         )
 
-    context = await build_admin_table_context(request, filters, page)
-    response = templates.TemplateResponse("partials/admin_users_table.html", context)
     response.headers["HX-Retarget"] = "#admin-table"
     response.headers["HX-Reswap"] = "outerHTML"
 
@@ -434,20 +497,24 @@ async def admin_users_bulk_delete(request: Request) -> HTMLResponse:
         },
         ensure_ascii=True,
     )
-    return response
+    return await build_admin_table_context(request, filters, page)
 
 
-@router.post("/users/{item_id}", response_class=HTMLResponse)
+@router.post("/users/{item_id}")
 @permission_decorator.permission_meta("admin_users", "update")
+@fasthx_page(render_admin_users_template)
 async def admin_users_update(
     request: Request,
+    response: Response,
     item_id: PydanticObjectId,
     display_name: str = Form(""),
     email: str = Form(""),
     role_slug: str = Form("admin"),
     status: str = Form("enabled"),
     password: str = Form(""),
-) -> HTMLResponse:
+) -> AdminUsersTemplatePayload:
+    """更新管理员。"""
+
     request_values = await read_request_values(request)
     filters, page = parse_admin_filters(request_values)
     item = await admin_user_service.get_admin(item_id)
@@ -480,9 +547,10 @@ async def admin_users_update(
             "filters": filters,
             "page": page,
         }
-        error_status = 200 if _is_htmx_request(request) else 422
-        return templates.TemplateResponse(
-            "partials/admin_users_form.html", context, status_code=error_status
+        response.status_code = 200 if _is_htmx_request(request) else 422
+        return AdminUsersTemplatePayload(
+            template="partials/admin_users_form.html",
+            context=context,
         )
 
     payload = {
@@ -504,8 +572,6 @@ async def admin_users_update(
     if str(item.id) == str(request.session.get("admin_id")):
         request.session["admin_name"] = item.display_name
 
-    context = await build_admin_table_context(request, filters, page)
-    response = templates.TemplateResponse("partials/admin_users_table.html", context)
     response.headers["HX-Retarget"] = "#admin-table"
     response.headers["HX-Reswap"] = "outerHTML"
     response.headers["HX-Trigger"] = json.dumps(
@@ -519,12 +585,19 @@ async def admin_users_update(
         },
         ensure_ascii=True,
     )
-    return response
+    context = await build_admin_table_context(request, filters, page)
+    return AdminUsersTemplatePayload(
+        template="partials/admin_users_table.html",
+        context=context,
+    )
 
 
-@router.delete("/users/{item_id}", response_class=HTMLResponse)
+@router.delete("/users/{item_id}")
 @permission_decorator.permission_meta("admin_users", "delete")
-async def admin_users_delete(request: Request, item_id: PydanticObjectId) -> HTMLResponse:
+@jinja.page("partials/admin_users_table.html")
+async def admin_users_delete(request: Request, response: Response, item_id: PydanticObjectId) -> dict[str, Any]:
+    """删除管理员。"""
+
     request_values = await read_request_values(request)
     filters, page = parse_admin_filters(request_values)
     item = await admin_user_service.get_admin(item_id)
@@ -543,8 +616,6 @@ async def admin_users_delete(request: Request, item_id: PydanticObjectId) -> HTM
         target_id=str(item.id),
         detail=f"删除管理员账号 {item.username}",
     )
-    context = await build_admin_table_context(request, filters, page)
-    response = templates.TemplateResponse("partials/admin_users_table.html", context)
     response.headers["HX-Retarget"] = "#admin-table"
     response.headers["HX-Reswap"] = "outerHTML"
     response.headers["HX-Trigger"] = json.dumps(
@@ -557,4 +628,4 @@ async def admin_users_delete(request: Request, item_id: PydanticObjectId) -> HTM
         },
         ensure_ascii=True,
     )
-    return response
+    return await build_admin_table_context(request, filters, page)

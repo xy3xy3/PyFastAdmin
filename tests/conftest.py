@@ -48,7 +48,11 @@ def mongo_cleanup(test_mongo_url: str, test_mongo_db_name: str) -> Iterator[None
                 f"{exc.details.get('errmsg', str(exc))}"
             )
         except PyMongoError as exc:
-            pytest.skip(f"MongoDB 不可用，跳过集成测试: {exc}")
+            pytest.skip(
+                "MongoDB 不可用，跳过集成测试。请先按 README.md 启动开发库："
+                "cd deploy/dev && docker compose --env-file ../../.env up -d；"
+                f"当前错误: {exc}"
+            )
 
         yield
     finally:

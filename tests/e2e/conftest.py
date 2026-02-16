@@ -66,7 +66,11 @@ def e2e_base_url(test_mongo_url: str, e2e_mongo_db_name: str) -> Iterator[str]:
             f"{exc.details.get('errmsg', str(exc))}"
         )
     except PyMongoError as exc:
-        pytest.skip(f"MongoDB 不可用，跳过 E2E: {exc}")
+        pytest.skip(
+            "MongoDB 不可用，跳过 E2E。请先按 README.md 启动开发库："
+            "cd deploy/dev && docker compose --env-file ../../.env up -d；"
+            f"当前错误: {exc}"
+        )
 
     port = _find_free_port()
     base_url = f"http://127.0.0.1:{port}"

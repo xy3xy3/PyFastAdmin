@@ -94,10 +94,10 @@
 
 > 目标文件：`app/apps/admin/controllers/admin_users.py`
 
-- [ ] 先迁移列表与 table partial 路由，再迁移 create/update/delete。
-- [ ] 保持弹窗提交失败时“弹窗内回显”行为不变。
-- [ ] 保持批量删除与“不可删除当前账号”逻辑不变。
-- [ ] 保持修改当前账号后 session 名称刷新逻辑不变。
+- [x] 先迁移列表与 table partial 路由，再迁移 create/update/delete。
+- [x] 保持弹窗提交失败时“弹窗内回显”行为不变。
+- [x] 保持批量删除与“不可删除当前账号”逻辑不变。
+- [x] 保持修改当前账号后 session 名称刷新逻辑不变。
 
 ### 4.2 第三批：rbac（C 类）
 

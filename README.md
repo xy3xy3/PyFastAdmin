@@ -94,6 +94,8 @@ uv run pytest -m e2e
 - `tests/unit/`：不依赖数据库
 - `tests/integration/`：自动清理 `TEST_MONGO_DB`
 - `tests/e2e/`：启动独立服务并使用 `TEST_E2E_MONGO_DB`
+- 若出现 “MongoDB 不可用” 或 `dropDatabase` 相关报错，请先确认开发库已启动，并优先使用具备测试库权限的 `TEST_MONGO_URL`：
+  - `cd deploy/dev && docker compose --env-file ../../.env up -d`
 
 ## 生产部署（含 uv Dockerfile）
 

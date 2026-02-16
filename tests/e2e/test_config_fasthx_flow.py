@@ -36,7 +36,7 @@ def test_config_page_can_save_backup_tab_settings_in_browser(e2e_base_url: str) 
         expect(backup_dir_input).to_be_visible()
         backup_dir_input.fill(local_dir)
 
-        page.get_by_role("button", name="保存配置").click()
+        page.get_by_role("button", name="保存设置").click()
         expect(page.locator("text=配置已保存。")).to_be_visible()
         expect(page.locator("input[name='config_tab']")).to_have_value("backup")
         expect(page.locator("input[name='backup_local_dir']")).to_have_value(local_dir)

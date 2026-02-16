@@ -2,30 +2,19 @@
 
 from __future__ import annotations
 
-from pathlib import Path
 from typing import Any
 from urllib.parse import urlsplit
 
-from fastapi import APIRouter, Form, Request
-from fastapi.responses import HTMLResponse, RedirectResponse, Response
-from fastapi.templating import Jinja2Templates
+from fasthx import page as fasthx_page
+from fastapi import APIRouter, Form, Request, Response
+from fastapi.responses import RedirectResponse
 
+from app.apps.admin.rendering import TemplatePayload, base_context, jinja, render_template_payload
 from app.services import admin_user_service, auth_service, csrf_service, log_service, permission_decorator, validators
 
-BASE_DIR = Path(__file__).resolve().parents[1]
-TEMPLATES_DIR = BASE_DIR / "templates"
-
-templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
 router = APIRouter(prefix="/admin")
 
 DEFAULT_NEXT_PATH = "/admin/dashboard"
-
-
-def base_context(request: Request) -> dict[str, Any]:
-    return {
-        "request": request,
-        "current_admin": request.session.get("admin_name"),
-    }
 
 
 def sanitize_next_path(next_url: str | None) -> str:
@@ -48,23 +37,29 @@ def sanitize_next_path(next_url: str | None) -> str:
     return parsed.path
 
 
-@router.get("/login", response_class=HTMLResponse)
-async def login_page(request: Request, next: str | None = None) -> HTMLResponse:
-    context = {
+@router.get("/login")
+@jinja.page("pages/login.html")
+async def login_page(request: Request, next: str | None = None) -> dict[str, Any]:
+    """登录页面。"""
+
+    return {
         "request": request,
         "next": sanitize_next_path(next),
         "error": "",
     }
-    return templates.TemplateResponse("pages/login.html", context)
 
 
-@router.post("/login", response_class=HTMLResponse)
+@router.post("/login")
+@fasthx_page(render_template_payload)
 async def login_action(
     request: Request,
+    response: Response,
     username: str = Form(""),
     password: str = Form(""),
     next: str = Form(DEFAULT_NEXT_PATH),
-) -> Response:
+) -> Response | TemplatePayload:
+    """登录动作。"""
+
     safe_next = sanitize_next_path(next)
     normalized_username = username.strip()
     admin = await auth_service.authenticate(normalized_username, password)
@@ -79,12 +74,15 @@ async def login_action(
             path=request.url.path,
             ip=log_service.get_request_ip(request),
         )
-        context = {
-            "request": request,
-            "next": safe_next,
-            "error": "账号或密码不正确，或账号已被禁用。",
-        }
-        return templates.TemplateResponse("pages/login.html", context, status_code=401)
+        response.status_code = 401
+        return TemplatePayload(
+            template="pages/login.html",
+            context={
+                "request": request,
+                "next": safe_next,
+                "error": "账号或密码不正确，或账号已被禁用。",
+            },
+        )
 
     request.session["admin_id"] = str(admin.id)
     request.session["admin_name"] = admin.display_name
@@ -102,6 +100,8 @@ async def login_action(
 
 @router.get("/logout")
 async def logout(request: Request) -> RedirectResponse:
+    """退出登录。"""
+
     await log_service.record_request(
         request,
         action="read",
@@ -113,8 +113,11 @@ async def logout(request: Request) -> RedirectResponse:
     return RedirectResponse(url="/admin/login", status_code=302)
 
 
-@router.get("/profile", response_class=HTMLResponse)
-async def profile_page(request: Request) -> Response:
+@router.get("/profile")
+@jinja.page("pages/profile.html")
+async def profile_page(request: Request) -> Response | dict[str, Any]:
+    """个人资料页面。"""
+
     admin_id = request.session.get("admin_id")
     admin = await auth_service.get_admin_by_id(admin_id)
     if not admin:
@@ -134,16 +137,20 @@ async def profile_page(request: Request) -> Response:
         target_id=str(admin.id),
         detail="访问个人资料页面",
     )
-    return templates.TemplateResponse("pages/profile.html", context)
+    return context
 
 
-@router.post("/profile", response_class=HTMLResponse)
+@router.post("/profile")
 @permission_decorator.permission_meta("profile", "update_self")
+@fasthx_page(render_template_payload)
 async def profile_update(
     request: Request,
+    response: Response,
     display_name: str = Form(""),
     email: str = Form(""),
-) -> Response:
+) -> Response | TemplatePayload:
+    """更新个人资料。"""
+
     admin_id = request.session.get("admin_id")
     admin = await auth_service.get_admin_by_id(admin_id)
     if not admin:
@@ -161,13 +168,16 @@ async def profile_update(
             target_id=str(admin.id),
             detail=f"更新个人资料失败：{email_error}",
         )
-        context = {
-            **base_context(request),
-            "admin": admin,
-            "error": email_error,
-            "saved": False,
-        }
-        return templates.TemplateResponse("pages/profile.html", context, status_code=422)
+        response.status_code = 422
+        return TemplatePayload(
+            template="pages/profile.html",
+            context={
+                **base_context(request),
+                "admin": admin,
+                "error": email_error,
+                "saved": False,
+            },
+        )
 
     payload = {
         "display_name": display_name_value,
@@ -184,17 +194,22 @@ async def profile_update(
         detail="更新个人资料信息",
     )
 
-    context = {
-        **base_context(request),
-        "admin": admin,
-        "error": "",
-        "saved": True,
-    }
-    return templates.TemplateResponse("pages/profile.html", context)
+    return TemplatePayload(
+        template="pages/profile.html",
+        context={
+            **base_context(request),
+            "admin": admin,
+            "error": "",
+            "saved": True,
+        },
+    )
 
 
-@router.get("/password", response_class=HTMLResponse)
-async def password_page(request: Request) -> Response:
+@router.get("/password")
+@jinja.page("pages/password.html")
+async def password_page(request: Request) -> Response | dict[str, Any]:
+    """修改密码页面。"""
+
     admin_id = request.session.get("admin_id")
     admin = await auth_service.get_admin_by_id(admin_id)
     if not admin:
@@ -213,17 +228,21 @@ async def password_page(request: Request) -> Response:
         target_id=str(admin.id),
         detail="访问修改密码页面",
     )
-    return templates.TemplateResponse("pages/password.html", context)
+    return context
 
 
-@router.post("/password", response_class=HTMLResponse)
+@router.post("/password")
 @permission_decorator.permission_meta("password", "update_self")
+@fasthx_page(render_template_payload)
 async def password_update(
     request: Request,
+    response: Response,
     old_password: str = Form(""),
     new_password: str = Form(""),
     confirm_password: str = Form(""),
-) -> Response:
+) -> Response | TemplatePayload:
+    """更新当前管理员密码。"""
+
     admin_id = request.session.get("admin_id")
     admin = await auth_service.get_admin_by_id(admin_id)
     if not admin:
@@ -238,8 +257,11 @@ async def password_update(
             target_id=str(admin.id),
             detail="修改密码失败：新密码长度不足",
         )
-        context = {**base_context(request), "error": "新密码至少 6 位。", "saved": False}
-        return templates.TemplateResponse("pages/password.html", context, status_code=422)
+        response.status_code = 422
+        return TemplatePayload(
+            template="pages/password.html",
+            context={**base_context(request), "error": "新密码至少 6 位。", "saved": False},
+        )
 
     if new_password != confirm_password:
         await log_service.record_request(
@@ -250,8 +272,11 @@ async def password_update(
             target_id=str(admin.id),
             detail="修改密码失败：两次密码输入不一致",
         )
-        context = {**base_context(request), "error": "两次输入的密码不一致。", "saved": False}
-        return templates.TemplateResponse("pages/password.html", context, status_code=422)
+        response.status_code = 422
+        return TemplatePayload(
+            template="pages/password.html",
+            context={**base_context(request), "error": "两次输入的密码不一致。", "saved": False},
+        )
 
     ok = await auth_service.change_password(admin, old_password, new_password)
     if not ok:
@@ -263,8 +288,11 @@ async def password_update(
             target_id=str(admin.id),
             detail="修改密码失败：旧密码校验不通过",
         )
-        context = {**base_context(request), "error": "旧密码不正确。", "saved": False}
-        return templates.TemplateResponse("pages/password.html", context, status_code=422)
+        response.status_code = 422
+        return TemplatePayload(
+            template="pages/password.html",
+            context={**base_context(request), "error": "旧密码不正确。", "saved": False},
+        )
 
     await log_service.record_request(
         request,
@@ -274,5 +302,7 @@ async def password_update(
         target_id=str(admin.id),
         detail="修改密码成功",
     )
-    context = {**base_context(request), "error": "", "saved": True}
-    return templates.TemplateResponse("pages/password.html", context)
+    return TemplatePayload(
+        template="pages/password.html",
+        context={**base_context(request), "error": "", "saved": True},
+    )

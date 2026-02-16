@@ -223,7 +223,7 @@ async def password_update(
     old_password: str = Form(""),
     new_password: str = Form(""),
     confirm_password: str = Form(""),
-) -> HTMLResponse:
+) -> HTMLResponse | RedirectResponse:
     admin_id = request.session.get("admin_id")
     admin = await auth_service.get_admin_by_id(admin_id)
     if not admin:

@@ -4,34 +4,28 @@ from __future__ import annotations
 
 import json
 from datetime import datetime
-from pathlib import Path
 from typing import Any, Mapping
 
-from fastapi import APIRouter, HTTPException, Request
-from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
-from fastapi.templating import Jinja2Templates
+from fasthx import page as fasthx_page
+from fastapi import APIRouter, HTTPException, Request, Response
+from fastapi.responses import JSONResponse, RedirectResponse
 
 from app.apps.admin.registry import ADMIN_TREE, iter_assignable_leaf_nodes
+from app.apps.admin.rendering import (
+    TemplatePayload,
+    base_context,
+    build_pagination,
+    fmt_dt,
+    jinja,
+    parse_positive_int,
+    read_request_values,
+    render_template_payload,
+    set_form_error_status,
+    set_hx_swap_headers,
+)
 from app.services import admin_user_service, log_service, permission_decorator, role_service, validators
 
-BASE_DIR = Path(__file__).resolve().parents[1]
-TEMPLATES_DIR = BASE_DIR / "templates"
-
-templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
 router = APIRouter(prefix="/admin")
-
-
-def fmt_dt(value: datetime | None) -> str:
-    """格式化日期，统一在页面展示短时间文本。"""
-
-    if not value:
-        return ""
-    if value.tzinfo is None:
-        return value.strftime("%Y-%m-%d %H:%M")
-    return value.astimezone().strftime("%Y-%m-%d %H:%M")
-
-
-templates.env.filters["fmt_dt"] = fmt_dt
 
 STATUS_META: dict[str, dict[str, str]] = {
     "enabled": {"label": "启用", "color": "#2f855a"},
@@ -89,21 +83,6 @@ def build_role_permission_tree() -> list[dict[str, Any]]:
 ROLE_PERMISSION_TREE = build_role_permission_tree()
 
 
-def base_context(request: Request) -> dict[str, Any]:
-    """构建模板基础上下文。"""
-
-    return {
-        "request": request,
-        "current_admin": request.session.get("admin_name"),
-    }
-
-
-def _is_htmx_request(request: Request) -> bool:
-    """判断是否为 HTMX 请求，用于区分表单错误返回策略。"""
-
-    return request.headers.get("hx-request", "").strip().lower() == "true"
-
-
 def build_role_form(values: dict[str, Any]) -> dict[str, Any]:
     """构建角色表单默认值。"""
 
@@ -124,16 +103,6 @@ def build_import_form(values: dict[str, Any]) -> dict[str, Any]:
         "payload": values.get("payload", ""),
         "allow_system": allow_system,
     }
-
-
-def parse_positive_int(value: Any, default: int = 1) -> int:
-    """安全解析正整数参数。"""
-
-    try:
-        parsed = int(str(value))
-    except (TypeError, ValueError):
-        return default
-    return parsed if parsed > 0 else default
 
 
 def parse_role_filters(values: Mapping[str, Any]) -> tuple[dict[str, str], int]:
@@ -157,37 +126,6 @@ def parse_role_filters(values: Mapping[str, Any]) -> tuple[dict[str, str], int]:
         },
         page,
     )
-
-
-def build_pagination(total: int, page: int, page_size: int) -> dict[str, Any]:
-    """构建分页结构，供模板渲染页码。"""
-
-    total_pages = max((total + page_size - 1) // page_size, 1)
-    current = min(max(page, 1), total_pages)
-    start_page = max(current - 2, 1)
-    end_page = min(start_page + 4, total_pages)
-    start_page = max(end_page - 4, 1)
-
-    if total == 0:
-        start_item = 0
-        end_item = 0
-    else:
-        start_item = (current - 1) * page_size + 1
-        end_item = min(current * page_size, total)
-
-    return {
-        "page": current,
-        "page_size": page_size,
-        "total": total,
-        "total_pages": total_pages,
-        "has_prev": current > 1,
-        "has_next": current < total_pages,
-        "prev_page": current - 1,
-        "next_page": current + 1,
-        "pages": list(range(start_page, end_page + 1)),
-        "start_item": start_item,
-        "end_item": end_item,
-    }
 
 
 def filter_roles(roles: list[Any], filters: dict[str, str]) -> list[Any]:
@@ -214,24 +152,6 @@ def filter_roles(roles: list[Any], filters: dict[str, str]) -> list[Any]:
     else:
         filtered = sorted(filtered, key=lambda item: item.updated_at, reverse=True)
     return filtered
-
-
-async def read_request_values(request: Request) -> dict[str, str]:
-    """统一读取 Query + Form 参数，兼容 HTMX 请求。"""
-
-    values: dict[str, str] = {key: value for key, value in request.query_params.items()}
-    if request.method == "GET":
-        return values
-
-    content_type = request.headers.get("content-type", "")
-    if "application/x-www-form-urlencoded" not in content_type and "multipart/form-data" not in content_type:
-        return values
-
-    form_data = await request.form()
-    for key, value in form_data.items():
-        if isinstance(value, str):
-            values[key] = value
-    return values
 
 
 async def build_role_table_context(
@@ -349,15 +269,16 @@ def build_import_summary_message(summary: dict[str, Any]) -> str:
     )
 
 
-@router.get("/", response_class=HTMLResponse)
+@router.get("/")
 async def admin_root() -> RedirectResponse:
     """后台首页重定向到仪表盘。"""
 
     return RedirectResponse(url="/admin/dashboard", status_code=302)
 
 
-@router.get("/dashboard", response_class=HTMLResponse)
-async def dashboard_page(request: Request) -> HTMLResponse:
+@router.get("/dashboard")
+@jinja.page("pages/dashboard.html")
+async def dashboard_page(request: Request) -> dict[str, Any]:
     """仪表盘页面。"""
 
     roles = await role_service.list_roles()
@@ -376,11 +297,12 @@ async def dashboard_page(request: Request) -> HTMLResponse:
         **base_context(request),
         "dashboard": dashboard,
     }
-    return templates.TemplateResponse("pages/dashboard.html", context)
+    return context
 
 
-@router.get("/rbac", response_class=HTMLResponse)
-async def rbac_page(request: Request) -> HTMLResponse:
+@router.get("/rbac")
+@jinja.page("pages/rbac.html")
+async def rbac_page(request: Request) -> dict[str, Any]:
     """RBAC 页面。"""
 
     filters, page = parse_role_filters(request.query_params)
@@ -394,16 +316,17 @@ async def rbac_page(request: Request) -> HTMLResponse:
         target="角色与权限",
         detail="访问 RBAC 角色列表页面",
     )
-    return templates.TemplateResponse("pages/rbac.html", context)
+    return context
 
 
-@router.get("/rbac/roles/table", response_class=HTMLResponse)
-async def role_table(request: Request) -> HTMLResponse:
+@router.get("/rbac/roles/table")
+@jinja.page("partials/role_table.html")
+async def role_table(request: Request) -> dict[str, Any]:
     """角色表格 partial。"""
 
     filters, page = parse_role_filters(request.query_params)
     context = await build_role_table_context(request, filters, page)
-    return templates.TemplateResponse("partials/role_table.html", context)
+    return context
 
 
 @router.get("/rbac/roles/export")
@@ -429,9 +352,10 @@ async def role_export(request: Request, include_system: str = "1") -> JSONRespon
     )
 
 
-@router.get("/rbac/roles/import", response_class=HTMLResponse)
+@router.get("/rbac/roles/import")
 @permission_decorator.permission_meta("rbac", "update")
-async def role_import_form(request: Request) -> HTMLResponse:
+@jinja.page("partials/role_import_form.html")
+async def role_import_form(request: Request) -> dict[str, Any]:
     """加载角色导入弹窗。"""
 
     filters, page = parse_role_filters(request.query_params)
@@ -442,12 +366,13 @@ async def role_import_form(request: Request) -> HTMLResponse:
         "filters": filters,
         "page": page,
     }
-    return templates.TemplateResponse("partials/role_import_form.html", context)
+    return context
 
 
-@router.post("/rbac/roles/import", response_class=HTMLResponse)
+@router.post("/rbac/roles/import")
 @permission_decorator.permission_meta("rbac", "update")
-async def role_import(request: Request) -> HTMLResponse:
+@fasthx_page(render_template_payload)
+async def role_import(request: Request, response: Response) -> TemplatePayload:
     """导入角色权限 JSON。"""
 
     request_values = await read_request_values(request)
@@ -480,8 +405,11 @@ async def role_import(request: Request) -> HTMLResponse:
             "filters": filters,
             "page": page,
         }
-        error_status = 200 if _is_htmx_request(request) else 422
-        return templates.TemplateResponse("partials/role_import_form.html", context, status_code=error_status)
+        set_form_error_status(response, request)
+        return TemplatePayload(
+            template="partials/role_import_form.html",
+            context=context,
+        )
 
     owner = request.session.get("admin_name") or "system"
     summary = await role_service.import_roles_payload(
@@ -500,9 +428,6 @@ async def role_import(request: Request) -> HTMLResponse:
     )
 
     context = await build_role_table_context(request, filters, page)
-    response = templates.TemplateResponse("partials/role_table.html", context)
-    response.headers["HX-Retarget"] = "#role-table"
-    response.headers["HX-Reswap"] = "outerHTML"
     has_errors = bool(summary["errors"])
     message = summary_message
     if has_errors:
@@ -511,8 +436,10 @@ async def role_import(request: Request) -> HTMLResponse:
         if brief_errors:
             message = f"{summary_message}。{brief_errors}"
 
-    response.headers["HX-Trigger"] = json.dumps(
-        {
+    set_hx_swap_headers(
+        response,
+        target="#role-table",
+        trigger={
             "rbac-toast": {
                 "title": "导入完成" if not has_errors else "导入完成（部分跳过）",
                 "message": message,
@@ -520,13 +447,16 @@ async def role_import(request: Request) -> HTMLResponse:
             },
             "rbac-close": True,
         },
-        ensure_ascii=True,
     )
-    return response
+    return TemplatePayload(
+        template="partials/role_table.html",
+        context=context,
+    )
 
 
-@router.get("/rbac/roles/new", response_class=HTMLResponse)
-async def role_new(request: Request) -> HTMLResponse:
+@router.get("/rbac/roles/new")
+@jinja.page("partials/role_form.html")
+async def role_new(request: Request) -> dict[str, Any]:
     """新建角色弹窗。"""
 
     form = build_role_form({})
@@ -544,11 +474,12 @@ async def role_new(request: Request) -> HTMLResponse:
         "filters": filters,
         "page": page,
     }
-    return templates.TemplateResponse("partials/role_form.html", context)
+    return context
 
 
-@router.get("/rbac/roles/{slug}/edit", response_class=HTMLResponse)
-async def role_edit(request: Request, slug: str) -> HTMLResponse:
+@router.get("/rbac/roles/{slug}/edit")
+@jinja.page("partials/role_form.html")
+async def role_edit(request: Request, slug: str) -> dict[str, Any]:
     """编辑角色弹窗。"""
 
     role = await role_service.get_role_by_slug(slug)
@@ -578,14 +509,16 @@ async def role_edit(request: Request, slug: str) -> HTMLResponse:
         "filters": filters,
         "page": page,
     }
-    return templates.TemplateResponse("partials/role_form.html", context)
+    return context
 
 
-@router.post("/rbac/roles", response_class=HTMLResponse)
+@router.post("/rbac/roles")
 @permission_decorator.permission_meta("rbac", "create")
+@fasthx_page(render_template_payload)
 async def role_create(
     request: Request,
-) -> HTMLResponse:
+    response: Response,
+) -> TemplatePayload:
     """创建角色。"""
 
     request_values = await read_request_values(request)
@@ -616,8 +549,11 @@ async def role_create(
             "filters": filters,
             "page": page,
         }
-        error_status = 200 if _is_htmx_request(request) else 422
-        return templates.TemplateResponse("partials/role_form.html", context, status_code=error_status)
+        set_form_error_status(response, request)
+        return TemplatePayload(
+            template="partials/role_form.html",
+            context=context,
+        )
 
     owner = request.session.get("admin_name") or "system"
     form["permissions"] = build_permissions(form_data, owner)
@@ -631,22 +567,24 @@ async def role_create(
         detail=f"创建角色 {form['slug']}",
     )
     context = await build_role_table_context(request, filters, page)
-    response = templates.TemplateResponse("partials/role_table.html", context)
-    response.headers["HX-Retarget"] = "#role-table"
-    response.headers["HX-Reswap"] = "outerHTML"
-    response.headers["HX-Trigger"] = json.dumps(
-        {
+    set_hx_swap_headers(
+        response,
+        target="#role-table",
+        trigger={
             "rbac-toast": {"title": "已创建", "message": "角色已保存", "variant": "success"},
             "rbac-close": True,
         },
-        ensure_ascii=True,
     )
-    return response
+    return TemplatePayload(
+        template="partials/role_table.html",
+        context=context,
+    )
 
 
-@router.post("/rbac/roles/bulk-delete", response_class=HTMLResponse)
+@router.post("/rbac/roles/bulk-delete")
 @permission_decorator.permission_meta("rbac", "delete")
-async def role_bulk_delete(request: Request) -> HTMLResponse:
+@jinja.page("partials/role_table.html")
+async def role_bulk_delete(request: Request, response: Response) -> dict[str, Any]:
     """批量删除角色。"""
 
     request_values = await read_request_values(request)
@@ -683,11 +621,6 @@ async def role_bulk_delete(request: Request) -> HTMLResponse:
             detail=f"批量删除角色 {role.slug}",
         )
 
-    context = await build_role_table_context(request, filters, page)
-    response = templates.TemplateResponse("partials/role_table.html", context)
-    response.headers["HX-Retarget"] = "#role-table"
-    response.headers["HX-Reswap"] = "outerHTML"
-
     if deleted_count == 0:
         toast_message = "未删除任何角色，请先勾选记录"
     else:
@@ -701,25 +634,28 @@ async def role_bulk_delete(request: Request) -> HTMLResponse:
         suffix = f"（跳过{'，'.join(extras)}）" if extras else ""
         toast_message = f"已删除 {deleted_count} 个角色{suffix}"
 
-    response.headers["HX-Trigger"] = json.dumps(
-        {
+    set_hx_swap_headers(
+        response,
+        target="#role-table",
+        trigger={
             "rbac-toast": {
                 "title": "批量删除完成",
                 "message": toast_message,
                 "variant": "warning",
             }
         },
-        ensure_ascii=True,
     )
-    return response
+    return await build_role_table_context(request, filters, page)
 
 
-@router.post("/rbac/roles/{slug}", response_class=HTMLResponse)
+@router.post("/rbac/roles/{slug}")
 @permission_decorator.permission_meta("rbac", "update")
+@fasthx_page(render_template_payload)
 async def role_update(
     request: Request,
+    response: Response,
     slug: str,
-) -> HTMLResponse:
+) -> TemplatePayload:
     """更新角色。"""
 
     request_values = await read_request_values(request)
@@ -752,8 +688,11 @@ async def role_update(
             "filters": filters,
             "page": page,
         }
-        error_status = 200 if _is_htmx_request(request) else 422
-        return templates.TemplateResponse("partials/role_form.html", context, status_code=error_status)
+        set_form_error_status(response, request)
+        return TemplatePayload(
+            template="partials/role_form.html",
+            context=context,
+        )
 
     owner = request.session.get("admin_name") or "system"
     form["permissions"] = build_permissions(form_data, owner)
@@ -767,22 +706,24 @@ async def role_update(
         detail=f"更新角色 {role.slug}",
     )
     context = await build_role_table_context(request, filters, page)
-    response = templates.TemplateResponse("partials/role_table.html", context)
-    response.headers["HX-Retarget"] = "#role-table"
-    response.headers["HX-Reswap"] = "outerHTML"
-    response.headers["HX-Trigger"] = json.dumps(
-        {
+    set_hx_swap_headers(
+        response,
+        target="#role-table",
+        trigger={
             "rbac-toast": {"title": "已更新", "message": "角色已修改", "variant": "success"},
             "rbac-close": True,
         },
-        ensure_ascii=True,
     )
-    return response
+    return TemplatePayload(
+        template="partials/role_table.html",
+        context=context,
+    )
 
 
-@router.delete("/rbac/roles/{slug}", response_class=HTMLResponse)
+@router.delete("/rbac/roles/{slug}")
 @permission_decorator.permission_meta("rbac", "delete")
-async def role_delete(request: Request, slug: str) -> HTMLResponse:
+@jinja.page("partials/role_table.html")
+async def role_delete(request: Request, response: Response, slug: str) -> dict[str, Any]:
     """删除角色。"""
 
     request_values = await read_request_values(request)
@@ -806,10 +747,8 @@ async def role_delete(request: Request, slug: str) -> HTMLResponse:
         target_id=role.slug,
         detail=f"删除角色 {role.slug}",
     )
-    context = await build_role_table_context(request, filters, page)
-    response = templates.TemplateResponse("partials/role_table.html", context)
     response.headers["HX-Trigger"] = json.dumps(
         {"rbac-toast": {"title": "已删除", "message": "角色已移除", "variant": "warning"}},
         ensure_ascii=True,
     )
-    return response
+    return await build_role_table_context(request, filters, page)

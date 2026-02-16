@@ -103,10 +103,10 @@
 
 > 目标文件：`app/apps/admin/controllers/rbac.py`
 
-- [ ] 分两步迁移：先 table，再 form（new/edit/create/update/delete/import）。
-- [ ] 重点验证权限树弹窗（宏渲染 + 回填 + read 依赖）行为。
-- [ ] 重点验证导入/导出与“部分跳过”toast 行为。
-- [ ] 确保 `permission_meta` 显式声明路由不丢失。
+- [x] 分两步迁移：先 table，再 form（new/edit/create/update/delete/import）。
+- [x] 重点验证权限树弹窗（宏渲染 + 回填 + read 依赖）行为。
+- [x] 重点验证导入/导出与“部分跳过”toast 行为。
+- [x] 确保 `permission_meta` 显式声明路由不丢失。
 
 ---
 

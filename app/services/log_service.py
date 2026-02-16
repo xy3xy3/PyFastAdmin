@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Literal, cast
 
 from beanie import PydanticObjectId
 from fastapi import Request
@@ -20,11 +20,13 @@ MODULE_LABELS: dict[str, str] = {
     "backup": "数据备份",
 }
 
+AuditAction = Literal["create", "read", "update", "delete", "trigger", "restore", "update_self"]
 
-def normalize_log_action(value: str) -> str:
+
+def normalize_log_action(value: str) -> AuditAction | Literal[""]:
     action = value.strip().lower()
     if action in set(config_service.AUDIT_ACTION_ORDER):
-        return action
+        return cast(AuditAction, action)
     return ""
 
 

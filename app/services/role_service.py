@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, cast
 
 from app.apps.admin.registry import ADMIN_TREE, iter_assignable_leaf_nodes, iter_leaf_nodes
 from app.models import AdminUser, Role
@@ -357,7 +357,7 @@ async def ensure_default_roles() -> None:
             continue
 
         if not role.permissions and default_permissions:
-            role.permissions = default_permissions
+            role.permissions = cast(list[Role.PermissionItem], default_permissions)
             role.updated_at = utc_now()
             await role.save()
             continue
@@ -371,6 +371,6 @@ async def ensure_default_roles() -> None:
         if not missing_permissions:
             continue
 
-        role.permissions = [*(role.permissions or []), *missing_permissions]
+        role.permissions = cast(list[Role.PermissionItem], [*(role.permissions or []), *missing_permissions])
         role.updated_at = utc_now()
         await role.save()

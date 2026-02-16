@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+from contextlib import asynccontextmanager
 from pathlib import Path
+from typing import AsyncIterator
 
 from fastapi import FastAPI
 from fastapi.responses import RedirectResponse
@@ -24,7 +26,23 @@ from .services.role_service import ensure_default_roles
 
 BASE_DIR = Path(__file__).resolve().parent
 
-app = FastAPI(title=APP_NAME)
+
+@asynccontextmanager
+async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
+    """应用生命周期：启动时初始化资源，退出时释放资源。"""
+
+    await init_db()
+    await ensure_default_roles()
+    await ensure_default_admin()
+    start_scheduler()
+    try:
+        yield
+    finally:
+        stop_scheduler()
+        await close_db()
+
+
+app = FastAPI(title=APP_NAME, lifespan=lifespan)
 app.mount("/static", StaticFiles(directory=BASE_DIR / "static"), name="static")
 app.add_middleware(AdminAuthMiddleware, exempt_paths={"/admin/logout"})
 app.add_middleware(SessionMiddleware, secret_key=SECRET_KEY, session_cookie="pfa_session")
@@ -39,19 +57,3 @@ app.include_router(backup_router)
 @app.get("/")
 async def root() -> RedirectResponse:
     return RedirectResponse(url="/admin/dashboard", status_code=302)
-
-
-@app.on_event("startup")
-async def on_startup() -> None:
-    """应用启动时初始化数据库、默认数据和备份调度器。"""
-    await init_db()
-    await ensure_default_roles()
-    await ensure_default_admin()
-    start_scheduler()
-
-
-@app.on_event("shutdown")
-async def on_shutdown() -> None:
-    """应用停止时关闭备份调度器与数据库连接。"""
-    stop_scheduler()
-    await close_db()

@@ -16,7 +16,7 @@ def utc_now() -> datetime:
 class OperationLog(Document):
     """后台操作日志。"""
 
-    action: Literal["create", "read", "update", "delete"]
+    action: Literal["create", "read", "update", "delete", "trigger", "restore", "update_self"]
     module: str = Field(..., min_length=2, max_length=32)
     target: str = Field(default="", max_length=80)
     target_id: str = Field(default="", max_length=64)

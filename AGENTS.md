@@ -209,6 +209,7 @@
 ## 9. 交付前自检清单（最少）
 - 单测：`uv run pytest -m unit`
 - 语法检查：`uv run python -m compileall app tests scripts`
+- 类型检查：`uv run pyright`（按项目根 `pyrightconfig.json` 范围执行）
 - 若改了 Tailwind：`pnpm build:css`
 - 若改了权限：人工确认以下场景
   - 无编辑权限时编辑按钮不显示

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import Any, cast
+
 from motor.motor_asyncio import AsyncIOMotorClient
 from beanie import init_beanie
 
@@ -16,7 +18,8 @@ async def init_db() -> None:
     global _mongo_client
     _mongo_client = AsyncIOMotorClient(MONGO_URL)
     await init_beanie(
-        database=_mongo_client[MONGO_DB],
+        # Motor 与 Beanie 的类型标注来源不同，这里显式转换避免类型检查误报。
+        database=cast(Any, _mongo_client[MONGO_DB]),
         document_models=[Role, AdminUser, ConfigItem, OperationLog, BackupRecord],
     )
 

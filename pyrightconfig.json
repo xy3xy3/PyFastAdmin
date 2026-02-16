@@ -1,0 +1,17 @@
+{
+  "include": [
+    "app",
+    "tests",
+    "scripts"
+  ],
+  "exclude": [
+    ".venv",
+    "refs",
+    "deploy",
+    "app/static",
+    "**/__pycache__"
+  ],
+  "venvPath": ".",
+  "venv": ".venv",
+  "typeCheckingMode": "standard"
+}

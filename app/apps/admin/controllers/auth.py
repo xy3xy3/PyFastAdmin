@@ -7,7 +7,7 @@ from typing import Any
 from urllib.parse import urlsplit
 
 from fastapi import APIRouter, Form, Request
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, RedirectResponse, Response
 from fastapi.templating import Jinja2Templates
 
 from app.services import admin_user_service, auth_service, csrf_service, log_service, permission_decorator, validators
@@ -64,7 +64,7 @@ async def login_action(
     username: str = Form(""),
     password: str = Form(""),
     next: str = Form(DEFAULT_NEXT_PATH),
-) -> HTMLResponse:
+) -> Response:
     safe_next = sanitize_next_path(next)
     normalized_username = username.strip()
     admin = await auth_service.authenticate(normalized_username, password)
@@ -114,7 +114,7 @@ async def logout(request: Request) -> RedirectResponse:
 
 
 @router.get("/profile", response_class=HTMLResponse)
-async def profile_page(request: Request) -> HTMLResponse:
+async def profile_page(request: Request) -> Response:
     admin_id = request.session.get("admin_id")
     admin = await auth_service.get_admin_by_id(admin_id)
     if not admin:
@@ -143,7 +143,7 @@ async def profile_update(
     request: Request,
     display_name: str = Form(""),
     email: str = Form(""),
-) -> HTMLResponse:
+) -> Response:
     admin_id = request.session.get("admin_id")
     admin = await auth_service.get_admin_by_id(admin_id)
     if not admin:
@@ -194,7 +194,7 @@ async def profile_update(
 
 
 @router.get("/password", response_class=HTMLResponse)
-async def password_page(request: Request) -> HTMLResponse:
+async def password_page(request: Request) -> Response:
     admin_id = request.session.get("admin_id")
     admin = await auth_service.get_admin_by_id(admin_id)
     if not admin:
@@ -223,7 +223,7 @@ async def password_update(
     old_password: str = Form(""),
     new_password: str = Form(""),
     confirm_password: str = Form(""),
-) -> HTMLResponse | RedirectResponse:
+) -> Response:
     admin_id = request.session.get("admin_id")
     admin = await auth_service.get_admin_by_id(admin_id)
     if not admin:

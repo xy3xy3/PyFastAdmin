@@ -90,7 +90,7 @@ def _normalize_generated_nav_node(payload: dict[str, Any]) -> dict[str, Any] | N
     if not resource:
         return None
 
-    normalized = {
+    normalized: dict[str, Any] = {
         "group_key": group_key,
         "resource": resource,
     }

@@ -43,9 +43,10 @@ def mongo_cleanup(test_mongo_url: str, test_mongo_db_name: str) -> Iterator[None
         try:
             client.drop_database(test_mongo_db_name)
         except OperationFailure as exc:
+            details = exc.details if isinstance(exc.details, dict) else {}
             pytest.skip(
                 "MongoDB 用户无 dropDatabase 权限，请配置 TEST_MONGO_URL 为有测试库权限的连接串: "
-                f"{exc.details.get('errmsg', str(exc))}"
+                f"{details.get('errmsg', str(exc))}"
             )
         except PyMongoError as exc:
             pytest.skip(

@@ -82,6 +82,9 @@ uv sync
 # 单元测试（纯逻辑）
 uv run pytest -m unit
 
+# 类型检查
+uv run pyright
+
 # 集成测试（需要 MongoDB）
 uv run pytest -m integration
 
@@ -191,6 +194,7 @@ uv run python scripts/generate_admin_module.py inventory --name "库存管理" -
 ```bash
 # 基础回归
 uv run pytest -m unit
+uv run pyright
 uv run python -m compileall app tests scripts
 
 # 若改了导入导出/权限映射，建议追加

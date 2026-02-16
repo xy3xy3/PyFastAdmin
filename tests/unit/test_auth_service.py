@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 from types import SimpleNamespace
+from typing import Any, cast
 
 import pytest
 
@@ -102,7 +103,7 @@ async def test_change_password_rejects_wrong_old_password(monkeypatch) -> None:
     admin = FakeAdmin()
     monkeypatch.setattr(auth_service, 'verify_password', lambda _raw, _hashed: False)
 
-    result = await auth_service.change_password(admin, 'wrong', 'new-pass')
+    result = await auth_service.change_password(cast(Any, admin), 'wrong', 'new-pass')
 
     assert result is False
     assert admin.password_hash == 'old-hash'
@@ -128,7 +129,7 @@ async def test_change_password_updates_hash_on_success(monkeypatch) -> None:
     monkeypatch.setattr(auth_service, 'hash_password', lambda _raw: 'new-hash')
     monkeypatch.setattr(auth_service, 'utc_now', lambda: fixed_now)
 
-    result = await auth_service.change_password(admin, 'old-pass', 'new-pass')
+    result = await auth_service.change_password(cast(Any, admin), 'old-pass', 'new-pass')
 
     assert result is True
     assert admin.password_hash == 'new-hash'

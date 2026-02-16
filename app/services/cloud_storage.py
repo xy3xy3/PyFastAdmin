@@ -86,7 +86,7 @@ class AliyunOSSBackend(CloudStorageBackend):
 
         self._bucket = bucket
         self._async_client: Any | None = None
-        self._sync_client: Any | None = None
+        self._sync_client: Any = Client(cfg)
 
         try:
             from alibabacloud_oss_v2.aio import AsyncClient
@@ -94,10 +94,7 @@ class AliyunOSSBackend(CloudStorageBackend):
             self._async_client = AsyncClient(cfg)
         except ImportError:
             # aiohttp 缺失时回退到同步客户端 + asyncio.to_thread，避免功能不可用。
-            self._sync_client = Client(cfg)
             logger.warning("未检测到 aiohttp，OSS SDK 降级为线程模式执行")
-        else:
-            self._sync_client = Client(cfg)
 
     async def upload_file(self, local_path: Path, remote_key: str) -> None:
         """上传本地文件到阿里云 OSS。"""

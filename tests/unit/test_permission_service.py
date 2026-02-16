@@ -2,8 +2,10 @@ from __future__ import annotations
 
 import re
 from types import SimpleNamespace
+from typing import cast
 
 import pytest
+from fastapi import Request
 from fastapi.routing import APIRoute
 
 from app.main import app
@@ -69,7 +71,7 @@ def test_build_permission_flags_contains_menu_switches() -> None:
 @pytest.mark.unit
 @pytest.mark.asyncio
 async def test_resolve_permission_map_uses_role_permissions_without_slug_special_case(monkeypatch) -> None:
-    request = SimpleNamespace(session={"admin_id": "abc"}, state=SimpleNamespace())
+    request = cast(Request, SimpleNamespace(session={"admin_id": "abc"}, state=SimpleNamespace()))
 
     admin = SimpleNamespace(status="enabled", role_slug="viewer")
     role = SimpleNamespace(
@@ -106,7 +108,7 @@ async def test_resolve_permission_map_uses_role_permissions_without_slug_special
 @pytest.mark.unit
 @pytest.mark.asyncio
 async def test_resolve_permission_map_requires_read_for_mutating_actions(monkeypatch) -> None:
-    request = SimpleNamespace(session={"admin_id": "abc"}, state=SimpleNamespace())
+    request = cast(Request, SimpleNamespace(session={"admin_id": "abc"}, state=SimpleNamespace()))
 
     admin = SimpleNamespace(status="enabled", role_slug="admin")
     role = SimpleNamespace(
@@ -136,7 +138,7 @@ async def test_resolve_permission_map_requires_read_for_mutating_actions(monkeyp
 @pytest.mark.unit
 @pytest.mark.asyncio
 async def test_resolve_permission_map_keeps_self_service_when_role_missing(monkeypatch) -> None:
-    request = SimpleNamespace(session={"admin_id": "abc"}, state=SimpleNamespace())
+    request = cast(Request, SimpleNamespace(session={"admin_id": "abc"}, state=SimpleNamespace()))
 
     admin = SimpleNamespace(status="enabled", role_slug="viewer")
 
@@ -160,7 +162,7 @@ async def test_resolve_permission_map_keeps_self_service_when_role_missing(monke
 @pytest.mark.unit
 @pytest.mark.asyncio
 async def test_resolve_permission_map_keeps_self_service_for_disabled_role(monkeypatch) -> None:
-    request = SimpleNamespace(session={"admin_id": "abc"}, state=SimpleNamespace())
+    request = cast(Request, SimpleNamespace(session={"admin_id": "abc"}, state=SimpleNamespace()))
 
     admin = SimpleNamespace(status="enabled", role_slug="viewer")
     role = SimpleNamespace(status="disabled", permissions=[])

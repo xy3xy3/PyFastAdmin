@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 from types import SimpleNamespace
+from typing import cast
 
 import pytest
+from fastapi import Request
 
 from app.middleware.auth import should_enforce_csrf
 
@@ -20,5 +22,5 @@ from app.middleware.auth import should_enforce_csrf
     ],
 )
 def test_should_enforce_csrf(method: str, path: str, admin_id: str | None, expected: bool) -> None:
-    request = SimpleNamespace(method=method, session={"admin_id": admin_id} if admin_id else {})
+    request = cast(Request, SimpleNamespace(method=method, session={"admin_id": admin_id} if admin_id else {}))
     assert should_enforce_csrf(request, path) is expected

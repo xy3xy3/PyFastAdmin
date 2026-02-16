@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 from types import SimpleNamespace
+from typing import cast
 
 import pytest
+from fastapi import Request
 
 from app.services import log_service
 from app.services.log_service import get_request_ip, normalize_log_action
@@ -17,16 +19,16 @@ def test_normalize_log_action() -> None:
 
 @pytest.mark.unit
 def test_get_request_ip_prefers_x_forwarded_for() -> None:
-    request = SimpleNamespace(
+    request = cast(Request, SimpleNamespace(
         headers={'x-forwarded-for': '10.10.1.1, 192.168.0.1'},
         client=SimpleNamespace(host='127.0.0.1'),
-    )
+    ))
     assert get_request_ip(request) == '10.10.1.1'
 
 
 @pytest.mark.unit
 def test_get_request_ip_falls_back_to_client_host() -> None:
-    request = SimpleNamespace(headers={}, client=SimpleNamespace(host='127.0.0.1'))
+    request = cast(Request, SimpleNamespace(headers={}, client=SimpleNamespace(host='127.0.0.1')))
     assert get_request_ip(request) == '127.0.0.1'
 
 
@@ -100,13 +102,13 @@ async def test_record_request_delegates_to_record_action(monkeypatch) -> None:
         captured.update(kwargs)
         return True
 
-    request = SimpleNamespace(
+    request = cast(Request, SimpleNamespace(
         session={'admin_name': 'alice'},
         method='PATCH',
         url=SimpleNamespace(path='/admin/config'),
         headers={'x-forwarded-for': '1.2.3.4'},
         client=SimpleNamespace(host='127.0.0.1'),
-    )
+    ))
 
     monkeypatch.setattr(log_service, 'record_action', fake_record_action)
 

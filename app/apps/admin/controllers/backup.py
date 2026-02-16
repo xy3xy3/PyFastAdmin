@@ -2,21 +2,20 @@
 
 from __future__ import annotations
 
-from datetime import datetime
-from pathlib import Path
 from typing import Any
 
 from fastapi import APIRouter, Request
-from fastapi.responses import HTMLResponse
-from fastapi.templating import Jinja2Templates
 
+from app.apps.admin.rendering import (
+    base_context,
+    build_pagination,
+    jinja,
+    parse_positive_int,
+    read_request_values,
+)
 from app.services import backup_service, log_service, permission_decorator
 from app.services.backup_scheduler import restart_scheduler
 
-BASE_DIR = Path(__file__).resolve().parents[1]
-TEMPLATES_DIR = BASE_DIR / "templates"
-
-templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
 router = APIRouter(prefix="/admin")
 
 BACKUP_PAGE_SIZE = 10
@@ -28,99 +27,6 @@ CLOUD_PROVIDER_LABELS: dict[str, str] = {
 }
 
 
-def fmt_dt(value: datetime | None) -> str:
-    """把 UTC 时间格式化为本地易读字符串。"""
-    if not value:
-        return ""
-    if value.tzinfo is None:
-        return value.strftime("%Y-%m-%d %H:%M")
-    return value.astimezone().strftime("%Y-%m-%d %H:%M")
-
-
-def fmt_bytes(value: int | None) -> str:
-    """把字节数格式化为人类可读单位。"""
-    size = int(value or 0)
-    units = ["B", "KB", "MB", "GB", "TB"]
-    current = float(size)
-    for unit in units:
-        if current < 1024 or unit == units[-1]:
-            if unit == "B":
-                return f"{int(current)} {unit}"
-            return f"{current:.2f} {unit}"
-        current /= 1024
-    return f"{size} B"
-
-
-templates.env.filters["fmt_dt"] = fmt_dt
-templates.env.filters["fmt_bytes"] = fmt_bytes
-
-
-def base_context(request: Request) -> dict[str, Any]:
-    """构造模板公共上下文。"""
-    return {
-        "request": request,
-        "current_admin": request.session.get("admin_name"),
-    }
-
-
-def parse_positive_int(raw_value: Any, default: int) -> int:
-    """把输入解析为正整数，失败时返回默认值。"""
-    try:
-        value = int(str(raw_value))
-    except (TypeError, ValueError):
-        return default
-    return value if value > 0 else default
-
-
-async def read_request_values(request: Request) -> dict[str, str]:
-    """兼容 query 与表单读取请求参数。"""
-    values: dict[str, str] = {key: value for key, value in request.query_params.items()}
-    if request.method == "GET":
-        return values
-
-    content_type = request.headers.get("content-type", "")
-    if "application/x-www-form-urlencoded" not in content_type and "multipart/form-data" not in content_type:
-        return values
-
-    form_data = await request.form()
-    for key, value in form_data.items():
-        if isinstance(value, str):
-            values[key] = value
-    return values
-
-
-def build_pagination(total: int, page: int, page_size: int) -> dict[str, Any]:
-    """构建分页元数据，便于模板直接渲染。"""
-    safe_size = max(page_size, 1)
-    total_pages = max((total + safe_size - 1) // safe_size, 1)
-    current = min(max(page, 1), total_pages)
-
-    start_page = max(current - 2, 1)
-    end_page = min(start_page + 4, total_pages)
-    start_page = max(end_page - 4, 1)
-
-    if total == 0:
-        start_item = 0
-        end_item = 0
-    else:
-        start_item = (current - 1) * safe_size + 1
-        end_item = min(current * safe_size, total)
-
-    return {
-        "page": current,
-        "page_size": safe_size,
-        "total": total,
-        "total_pages": total_pages,
-        "has_prev": current > 1,
-        "has_next": current < total_pages,
-        "prev_page": current - 1,
-        "next_page": current + 1,
-        "pages": list(range(start_page, end_page + 1)),
-        "start_item": start_item,
-        "end_item": end_item,
-    }
-
-
 async def build_table_context(
     request: Request,
     page: int,
@@ -128,6 +34,7 @@ async def build_table_context(
     action_feedback: dict[str, str] | None = None,
 ) -> dict[str, Any]:
     """构建备份记录表格上下文。"""
+
     records, total = await backup_service.list_backup_records(page=page, page_size=page_size)
     pagination = build_pagination(total, page, page_size)
 
@@ -139,10 +46,12 @@ async def build_table_context(
     }
 
 
-@router.get("/backup", response_class=HTMLResponse)
+@router.get("/backup")
 @permission_decorator.permission_meta("backup_records", "read")
-async def backup_page(request: Request) -> HTMLResponse:
+@jinja.page("pages/backup.html")
+async def backup_page(request: Request) -> dict[str, Any]:
     """备份管理主页。"""
+
     config = await backup_service.get_backup_config()
     collections = await backup_service.get_collection_names()
 
@@ -163,37 +72,41 @@ async def backup_page(request: Request) -> HTMLResponse:
         target="数据备份",
         detail="访问数据备份页面",
     )
-    return templates.TemplateResponse("pages/backup.html", context)
+    return context
 
 
-@router.get("/backup/table", response_class=HTMLResponse)
+@router.get("/backup/table")
 @permission_decorator.permission_meta("backup_records", "read")
-async def backup_table(request: Request) -> HTMLResponse:
+@jinja.page("partials/backup_table.html")
+async def backup_table(request: Request) -> dict[str, Any]:
     """HTMX 局部刷新备份记录表格。"""
+
     page = parse_positive_int(request.query_params.get("page"), default=1)
     page_size = parse_positive_int(request.query_params.get("page_size"), default=BACKUP_PAGE_SIZE)
-    context = await build_table_context(request, page=page, page_size=page_size)
-    return templates.TemplateResponse("partials/backup_table.html", context)
+    return await build_table_context(request, page=page, page_size=page_size)
 
 
-@router.get("/backup/collections", response_class=HTMLResponse)
+@router.get("/backup/collections")
 @permission_decorator.permission_meta("backup_config", "read")
-async def backup_collections(request: Request) -> HTMLResponse:
+@jinja.page("partials/backup_collections.html")
+async def backup_collections(request: Request) -> dict[str, Any]:
     """HTMX 局部刷新可选集合列表。"""
+
     config = await backup_service.get_backup_config()
     collections = await backup_service.get_collection_names()
-    context = {
+    return {
         **base_context(request),
         "collections": collections,
         "excluded_collections": set(config.get("excluded_collections", [])),
     }
-    return templates.TemplateResponse("partials/backup_collections.html", context)
 
 
-@router.post("/backup", response_class=HTMLResponse)
+@router.post("/backup")
 @permission_decorator.permission_meta("backup_config", "update")
-async def backup_save_config(request: Request) -> HTMLResponse:
+@jinja.page("pages/backup.html")
+async def backup_save_config(request: Request) -> dict[str, Any]:
     """保存备份配置。"""
+
     form = await request.form()
 
     payload: dict[str, Any] = {
@@ -248,13 +161,19 @@ async def backup_save_config(request: Request) -> HTMLResponse:
         target="备份配置",
         detail="更新数据备份配置",
     )
-    return templates.TemplateResponse("pages/backup.html", context)
+    return context
 
 
-@router.post("/backup/trigger", response_class=HTMLResponse)
+@router.post("/backup/trigger")
 @permission_decorator.permission_meta("backup_records", "trigger")
-async def backup_trigger(request: Request) -> HTMLResponse:
+@jinja.page("partials/backup_table.html")
+async def backup_trigger(request: Request) -> dict[str, Any]:
     """手动触发一次备份。"""
+
+    values = await read_request_values(request)
+    page = parse_positive_int(values.get("page"), default=1)
+    page_size = parse_positive_int(values.get("page_size"), default=BACKUP_PAGE_SIZE)
+
     record = await backup_service.run_backup()
     feedback = {
         "variant": "success" if record.status == "success" else "error",
@@ -262,8 +181,8 @@ async def backup_trigger(request: Request) -> HTMLResponse:
     }
     context = await build_table_context(
         request,
-        page=1,
-        page_size=BACKUP_PAGE_SIZE,
+        page=page,
+        page_size=page_size,
         action_feedback=feedback,
     )
 
@@ -274,13 +193,15 @@ async def backup_trigger(request: Request) -> HTMLResponse:
         target="手动备份",
         detail=f"手动触发数据库备份，状态：{record.status}",
     )
-    return templates.TemplateResponse("partials/backup_table.html", context)
+    return context
 
 
-@router.post("/backup/{record_id}/restore", response_class=HTMLResponse)
+@router.post("/backup/{record_id}/restore")
 @permission_decorator.permission_meta("backup_records", "restore")
-async def backup_restore(request: Request, record_id: str) -> HTMLResponse:
+@jinja.page("partials/backup_table.html")
+async def backup_restore(request: Request, record_id: str) -> dict[str, Any]:
     """按指定备份记录恢复数据库。"""
+
     values = await read_request_values(request)
     page = parse_positive_int(values.get("page"), default=1)
     page_size = parse_positive_int(values.get("page_size"), default=BACKUP_PAGE_SIZE)
@@ -305,13 +226,15 @@ async def backup_restore(request: Request, record_id: str) -> HTMLResponse:
         target_id=record_id,
         detail=f"恢复备份记录 {record_id}：{message}",
     )
-    return templates.TemplateResponse("partials/backup_table.html", context)
+    return context
 
 
-@router.delete("/backup/{record_id}", response_class=HTMLResponse)
+@router.delete("/backup/{record_id}")
 @permission_decorator.permission_meta("backup_records", "delete")
-async def backup_delete(request: Request, record_id: str) -> HTMLResponse:
+@jinja.page("partials/backup_table.html")
+async def backup_delete(request: Request, record_id: str) -> dict[str, Any]:
     """删除一条备份记录。"""
+
     values = await read_request_values(request)
     page = parse_positive_int(values.get("page"), default=1)
     page_size = parse_positive_int(values.get("page_size"), default=BACKUP_PAGE_SIZE)
@@ -336,4 +259,4 @@ async def backup_delete(request: Request, record_id: str) -> HTMLResponse:
         target_id=record_id,
         detail=feedback["message"],
     )
-    return templates.TemplateResponse("partials/backup_table.html", context)
+    return context

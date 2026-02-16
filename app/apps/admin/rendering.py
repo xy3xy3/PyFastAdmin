@@ -29,7 +29,23 @@ def fmt_dt(value: datetime | None) -> str:
     return value.astimezone().strftime("%Y-%m-%d %H:%M")
 
 
+def fmt_bytes(value: int | None) -> str:
+    """把字节数格式化为人类可读单位。"""
+
+    size = int(value or 0)
+    units = ["B", "KB", "MB", "GB", "TB"]
+    current = float(size)
+    for unit in units:
+        if current < 1024 or unit == units[-1]:
+            if unit == "B":
+                return f"{int(current)} {unit}"
+            return f"{current:.2f} {unit}"
+        current /= 1024
+    return f"{size} B"
+
+
 templates.env.filters["fmt_dt"] = fmt_dt
+templates.env.filters["fmt_bytes"] = fmt_bytes
 
 
 @dataclass(frozen=True, slots=True)

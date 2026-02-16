@@ -2,20 +2,14 @@
 
 from __future__ import annotations
 
-from pathlib import Path
 from typing import Any
 
 from fastapi import APIRouter, Form, Request
-from fastapi.responses import HTMLResponse
-from fastapi.templating import Jinja2Templates
 
+from app.apps.admin.rendering import base_context, jinja
 from app.services import backup_service, config_service, log_service, permission_decorator
 from app.services.backup_scheduler import restart_scheduler
 
-BASE_DIR = Path(__file__).resolve().parents[1]
-TEMPLATES_DIR = BASE_DIR / "templates"
-
-templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
 router = APIRouter(prefix="/admin")
 
 CLOUD_PROVIDER_LABELS: dict[str, str] = {
@@ -25,22 +19,16 @@ CLOUD_PROVIDER_LABELS: dict[str, str] = {
 VALID_CONFIG_TABS = {"system", "backup"}
 
 
-def base_context(request: Request) -> dict[str, Any]:
-    """构造模板公共上下文。"""
-    return {
-        "request": request,
-        "current_admin": request.session.get("admin_name"),
-    }
-
-
 def _normalize_config_tab(raw_value: Any) -> str:
     """规范化配置页签参数，仅允许 system/backup。"""
+
     tab = str(raw_value or "").strip().lower()
     return tab if tab in VALID_CONFIG_TABS else "system"
 
 
 def _build_backup_payload(form_data: Any) -> dict[str, Any]:
     """从系统配置表单构建备份配置载荷。"""
+
     return {
         "enabled": form_data.get("backup_enabled") == "on",
         "local_dir": str(form_data.get("backup_local_dir", "backups")).strip(),
@@ -73,9 +61,11 @@ def _build_backup_payload(form_data: Any) -> dict[str, Any]:
     }
 
 
-@router.get("/config", response_class=HTMLResponse)
-async def config_page(request: Request) -> HTMLResponse:
+@router.get("/config")
+@jinja.page("pages/config.html")
+async def config_page(request: Request) -> dict[str, Any]:
     """系统配置主页。"""
+
     smtp = await config_service.get_smtp_config()
     audit_actions = await config_service.get_audit_log_actions()
     backup_config = await backup_service.get_backup_config()
@@ -100,11 +90,12 @@ async def config_page(request: Request) -> HTMLResponse:
         target="系统配置",
         detail=f"访问系统配置页面（tab={active_config_tab}）",
     )
-    return templates.TemplateResponse("pages/config.html", context)
+    return context
 
 
-@router.post("/config", response_class=HTMLResponse)
+@router.post("/config")
 @permission_decorator.permission_meta("config", "update")
+@jinja.page("pages/config.html")
 async def config_save(
     request: Request,
     smtp_host: str = Form(""),
@@ -113,8 +104,9 @@ async def config_save(
     smtp_pass: str = Form(""),
     smtp_from: str = Form(""),
     smtp_ssl: str = Form(""),
-) -> HTMLResponse:
+) -> dict[str, Any]:
     """保存系统配置（SMTP + 日志策略 + 备份设置）。"""
+
     form_data = await request.form()
     active_config_tab = _normalize_config_tab(form_data.get("config_tab"))
 
@@ -163,4 +155,4 @@ async def config_save(
         target="系统配置",
         detail=detail,
     )
-    return templates.TemplateResponse("pages/config.html", context)
+    return context

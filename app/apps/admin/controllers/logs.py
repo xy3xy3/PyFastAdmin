@@ -7,8 +7,8 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Mapping
 
-from fastapi import APIRouter, HTTPException, Request
-from fastapi.responses import HTMLResponse
+from fasthx.jinja import Jinja
+from fastapi import APIRouter, HTTPException, Request, Response
 from fastapi.templating import Jinja2Templates
 
 from app.services import config_service, log_service, permission_decorator
@@ -17,6 +17,7 @@ BASE_DIR = Path(__file__).resolve().parents[1]
 TEMPLATES_DIR = BASE_DIR / "templates"
 
 templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
+jinja = Jinja(templates)
 router = APIRouter(prefix="/admin")
 
 LOG_PAGE_SIZE = 15
@@ -28,6 +29,8 @@ LOG_SORT_OPTIONS: dict[str, str] = {
 
 
 def fmt_dt(value: datetime | None) -> str:
+    """格式化日期时间，统一页面展示精度。"""
+
     if not value:
         return ""
     if value.tzinfo is None:
@@ -39,6 +42,8 @@ templates.env.filters["fmt_dt"] = fmt_dt
 
 
 def base_context(request: Request) -> dict[str, Any]:
+    """构建日志模块模板基础上下文。"""
+
     return {
         "request": request,
         "current_admin": request.session.get("admin_name"),
@@ -46,6 +51,8 @@ def base_context(request: Request) -> dict[str, Any]:
 
 
 def parse_positive_int(value: Any, default: int = 1) -> int:
+    """安全解析正整数参数，非法值回退到默认值。"""
+
     try:
         parsed = int(str(value))
     except (TypeError, ValueError):
@@ -54,6 +61,8 @@ def parse_positive_int(value: Any, default: int = 1) -> int:
 
 
 def parse_log_filters(values: Mapping[str, Any]) -> tuple[dict[str, str], int]:
+    """解析并清洗日志筛选条件。"""
+
     search_q = str(values.get("search_q") or values.get("q") or "").strip()
     search_action = str(values.get("search_action") or "").strip().lower()
     if search_action not in set(config_service.AUDIT_ACTION_ORDER):
@@ -80,6 +89,8 @@ def parse_log_filters(values: Mapping[str, Any]) -> tuple[dict[str, str], int]:
 
 
 def build_pagination(total: int, page: int, page_size: int) -> dict[str, Any]:
+    """构建分页数据，供模板渲染页码和统计信息。"""
+
     total_pages = max((total + page_size - 1) // page_size, 1)
     current = min(max(page, 1), total_pages)
     start_page = max(current - 2, 1)
@@ -131,6 +142,8 @@ async def build_log_table_context(
     filters: dict[str, str],
     page: int,
 ) -> dict[str, Any]:
+    """构建日志表格上下文。"""
+
     items, total = await log_service.list_logs(filters, page, LOG_PAGE_SIZE)
     pagination = build_pagination(total, page, LOG_PAGE_SIZE)
 
@@ -144,8 +157,11 @@ async def build_log_table_context(
     }
 
 
-@router.get("/logs", response_class=HTMLResponse)
-async def logs_page(request: Request) -> HTMLResponse:
+@router.get("/logs")
+@jinja.page("pages/logs.html")
+async def logs_page(request: Request) -> dict[str, Any]:
+    """日志页面。"""
+
     filters, page = parse_log_filters(request.query_params)
     context = await build_log_table_context(request, filters, page)
     context["log_sort_options"] = LOG_SORT_OPTIONS
@@ -158,19 +174,22 @@ async def logs_page(request: Request) -> HTMLResponse:
         target="操作日志",
         detail="访问操作日志页面",
     )
-    return templates.TemplateResponse("pages/logs.html", context)
+    return context
 
 
-@router.get("/logs/table", response_class=HTMLResponse)
-async def logs_table(request: Request) -> HTMLResponse:
+@router.get("/logs/table")
+@jinja.page("partials/logs_table.html")
+async def logs_table(request: Request) -> dict[str, Any]:
+    """日志表格 partial。"""
+
     filters, page = parse_log_filters(request.query_params)
-    context = await build_log_table_context(request, filters, page)
-    return templates.TemplateResponse("partials/logs_table.html", context)
+    return await build_log_table_context(request, filters, page)
 
 
-@router.delete("/logs/{log_id}", response_class=HTMLResponse)
+@router.delete("/logs/{log_id}")
 @permission_decorator.permission_meta("operation_logs", "delete")
-async def logs_delete(request: Request, log_id: str) -> HTMLResponse:
+@jinja.hx("partials/logs_table.html", no_data=True)
+async def logs_delete(request: Request, response: Response, log_id: str) -> dict[str, Any]:
     """删除单条操作日志。"""
 
     request_values = await read_request_values(request)
@@ -190,8 +209,6 @@ async def logs_delete(request: Request, log_id: str) -> HTMLResponse:
         detail=f"删除日志 {log_id}",
     )
 
-    context = await build_log_table_context(request, filters, page)
-    response = templates.TemplateResponse("partials/logs_table.html", context)
     response.headers["HX-Retarget"] = "#logs-table"
     response.headers["HX-Reswap"] = "outerHTML"
     response.headers["HX-Trigger"] = json.dumps(
@@ -204,12 +221,13 @@ async def logs_delete(request: Request, log_id: str) -> HTMLResponse:
         },
         ensure_ascii=True,
     )
-    return response
+    return await build_log_table_context(request, filters, page)
 
 
-@router.post("/logs/bulk-delete", response_class=HTMLResponse)
+@router.post("/logs/bulk-delete")
 @permission_decorator.permission_meta("operation_logs", "delete")
-async def logs_bulk_delete(request: Request) -> HTMLResponse:
+@jinja.hx("partials/logs_table.html", no_data=True)
+async def logs_bulk_delete(request: Request, response: Response) -> dict[str, Any]:
     """批量删除操作日志。"""
 
     request_values = await read_request_values(request)
@@ -237,8 +255,6 @@ async def logs_bulk_delete(request: Request) -> HTMLResponse:
             detail=f"批量删除日志 {deleted_count} 条",
         )
 
-    context = await build_log_table_context(request, filters, page)
-    response = templates.TemplateResponse("partials/logs_table.html", context)
     response.headers["HX-Retarget"] = "#logs-table"
     response.headers["HX-Reswap"] = "outerHTML"
 
@@ -259,4 +275,4 @@ async def logs_bulk_delete(request: Request) -> HTMLResponse:
         },
         ensure_ascii=True,
     )
-    return response
+    return await build_log_table_context(request, filters, page)

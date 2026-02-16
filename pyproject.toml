@@ -21,6 +21,7 @@ dependencies = [
   "alibabacloud-oss-v2>=1.2.4",
   "cos-python-sdk-v5>=1.9.41",
   "aiohttp>=3.13.3",
+  "fasthx>=3.1.0",
 ]
 
 [project.urls]

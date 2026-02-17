@@ -6,4 +6,8 @@ from .config_item import ConfigItem
 from .operation_log import OperationLog
 from .backup_record import BackupRecord
 
-__all__ = ["Role", "AdminUser", "ConfigItem", "OperationLog", "BackupRecord"]
+from .async_tasks import AsyncTasksItem
+
+from .queue_consumers import QueueConsumersItem
+
+__all__ = ["Role", "AdminUser", "ConfigItem", "OperationLog", "BackupRecord", "AsyncTasksItem", "QueueConsumersItem"]

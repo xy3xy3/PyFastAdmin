@@ -1,0 +1,12 @@
+{
+  "group_key": "system",
+  "node": {
+    "key": "async_tasks",
+    "name": "异步任务",
+    "url": "/admin/async_tasks",
+    "mode": "settings",
+    "actions": [
+      "read"
+    ]
+  }
+}

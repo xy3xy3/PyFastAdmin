@@ -27,6 +27,10 @@ def test_required_permission_route_mapping() -> None:
     assert permission_service.required_permission("/admin/backup/demo/restore", "POST") == ("backup_records", "restore")
     assert permission_service.required_permission("/admin/logs/demo", "DELETE") == ("operation_logs", "delete")
     assert permission_service.required_permission("/admin/logs/bulk-delete", "POST") == ("operation_logs", "delete")
+    assert permission_service.required_permission("/admin/async_tasks", "GET") == ("async_tasks", "read")
+    assert permission_service.required_permission("/admin/async_tasks/table", "GET") == ("async_tasks", "read")
+    assert permission_service.required_permission("/admin/queue_consumers", "GET") == ("queue_consumers", "read")
+    assert permission_service.required_permission("/admin/queue_consumers/table", "GET") == ("queue_consumers", "read")
     assert permission_service.required_permission("/admin/unknown", "GET") is None
 
 

@@ -14,7 +14,6 @@ from app.apps.admin.rendering import (
     read_request_values,
 )
 from app.services import backup_service, log_service, permission_decorator
-from app.services.backup_scheduler import restart_scheduler
 
 router = APIRouter(prefix="/admin")
 
@@ -141,8 +140,6 @@ async def backup_save_config(request: Request) -> dict[str, Any]:
     }
 
     config = await backup_service.save_backup_config(payload)
-    restart_scheduler()
-
     collections = await backup_service.get_collection_names()
     context = await build_table_context(request, page=1, page_size=BACKUP_PAGE_SIZE)
     context.update(

@@ -8,7 +8,6 @@ from fastapi import APIRouter, Form, Request
 
 from app.apps.admin.rendering import base_context, jinja
 from app.services import backup_service, config_service, log_service, permission_decorator
-from app.services.backup_scheduler import restart_scheduler
 
 router = APIRouter(prefix="/admin")
 
@@ -128,7 +127,6 @@ async def config_save(
     await config_service.save_smtp_config(smtp_payload)
     audit_actions = await config_service.save_audit_log_actions(selected_actions)
     await backup_service.save_backup_config(backup_payload)
-    restart_scheduler()
 
     smtp = await config_service.get_smtp_config()
     backup_config = await backup_service.get_backup_config()

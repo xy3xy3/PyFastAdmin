@@ -1,0 +1,59 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="space-y-4" x-data='{{ {"search_q": filters.search_q, "tab": filters.tab, "page": pagination.page}|tojson }}'>
+  <section class="card p-5">
+    <div class="flex flex-wrap items-center justify-between gap-3">
+      <div>
+        <h1 class="text-lg font-semibold text-slate-900">异步任务监控</h1>
+        <p class="text-sm text-slate-500">查看周期任务状态、运行统计与标签筛选</p>
+      </div>
+      <div class="inline-flex rounded-md border border-slate-200 bg-white p-1">
+        {% for tab_item in tabs %}
+          <button
+            type="button"
+            class="rounded-md border px-3 py-1.5 text-sm font-medium transition-colors"
+            :class="tab === '{{ tab_item.key }}' ? 'border-blue-200 bg-blue-50 text-blue-700' : 'border-transparent text-slate-600 hover:border-slate-200 hover:bg-slate-50'"
+            x-on:click="tab='{{ tab_item.key }}'; page=1; $nextTick(() => document.getElementById('async_tasks-search-form').requestSubmit())"
+          >
+            {{ tab_item.name }}
+          </button>
+        {% endfor %}
+      </div>
+    </div>
+
+    <form
+      id="async_tasks-search-form"
+      class="mt-4 grid gap-4 md:grid-cols-12"
+      hx-get="/admin/async_tasks/table"
+      hx-target="#async_tasks-table"
+      hx-swap="outerHTML"
+      hx-indicator="#global-indicator"
+      x-on:submit="page = 1"
+    >
+      <input type="hidden" name="page" x-model="page" />
+      <input type="hidden" name="tab" x-model="tab" />
+
+      <div class="md:col-span-9">
+        <label class="label">关键词</label>
+        <input name="search_q" x-model="search_q" class="input" placeholder="任务名称 / key / 标签" />
+      </div>
+
+      <div class="md:col-span-3 flex flex-wrap items-end justify-end gap-3">
+        <button
+          type="button"
+          class="btn-ghost"
+          x-on:click="search_q=''; tab='all'; page=1; $nextTick(() => $el.form.requestSubmit())"
+        >
+          重置
+        </button>
+        <button type="submit" class="btn-primary">搜索</button>
+      </div>
+    </form>
+  </section>
+
+  <section>
+    {% include "partials/async_tasks_table.html" %}
+  </section>
+</div>
+{% endblock %}

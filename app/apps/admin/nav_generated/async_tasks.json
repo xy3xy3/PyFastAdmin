@@ -1,0 +1,13 @@
+{
+  "group_key": "system",
+  "node": {
+    "resource": "async_tasks",
+    "name": "异步任务",
+    "url": "/admin/async_tasks",
+    "icon": "fa-solid fa-clock-rotate-left",
+    "menu_visible": true,
+    "match_prefixes": [
+      "/admin/async_tasks"
+    ]
+  }
+}

@@ -19,9 +19,10 @@ HTMX + Alpine.js + Tailwind + FastAPI + Jinja2 + Beanie 的不分离管理后台
 - `refs/`：外部仓库参考（已 gitignore）
 
 ## 本地运行
-1. 准备 MongoDB（开发环境）
+1. 准备 MongoDB + Redis（开发环境，必须配置密码）
 
 ```bash
+# 先在 .env 配置 MONGO_ROOT_USERNAME / MONGO_ROOT_PASSWORD / REDIS_PASSWORD
 cd deploy/dev
 docker compose --env-file ../../.env up -d
 ```
@@ -41,10 +42,10 @@ source .venv/bin/activate
 uv sync
 ```
 
-4. 启动服务
+4. 启动服务（统一编排 HTTP + 队列 + 周期任务）
 
 ```bash
-uv run uvicorn app.main:app --reload --port ${APP_PORT:-8000}
+uv run main.py
 ```
 
 访问：http://localhost:8000/admin/rbac
@@ -53,6 +54,8 @@ uv run uvicorn app.main:app --reload --port ${APP_PORT:-8000}
 - 个人资料：http://localhost:8000/admin/profile
 - 修改密码：http://localhost:8000/admin/password
 - 系统配置：http://localhost:8000/admin/config
+- 异步任务监控：http://localhost:8000/admin/async_tasks
+- 队列消费监控：http://localhost:8000/admin/queue_consumers
 
 首次启动会自动创建默认管理员（用户名/密码来自 `.env` 的 `ADMIN_USER`、`ADMIN_PASS`）。
 
@@ -110,12 +113,23 @@ docker compose --env-file ../../.env up -d --build
 ## 环境变量
 参考 `.env.example`，重点变量：
 - `APP_PORT`：应用端口
-- `MONGO_URL`：MongoDB 连接串
+- `MONGO_ROOT_USERNAME` / `MONGO_ROOT_PASSWORD`：MongoDB root 账号密码（dev/prod 必填）
+- `MONGO_URL`：MongoDB 连接串（需包含账号密码）
 - `MONGO_DB`：数据库名称
 - `MONGO_PORT`：MongoDB 容器映射端口
+- `REDIS_PASSWORD`：Redis 密码（dev/prod 必填）
+- `REDIS_URL`：Redis 连接串（需包含密码）
+- `REDIS_PORT`：Redis 容器映射端口
 - `SECRET_KEY`：Session 加密密钥
 - `ADMIN_USER`：默认管理员账号
 - `ADMIN_PASS`：默认管理员密码
+- `HTTP_WORKERS`：FastAPI HTTP 进程数
+- `QUEUE_WORKERS`：Redis 队列消费进程数
+- `PERIODIC_WORKERS`：周期任务进程数
+- `QUEUE_MAX_RETRIES`：队列消息最大重试次数
+- `QUEUE_BLOCK_MS`：消费者阻塞读取超时（毫秒）
+- `LOG_CLEANUP_INTERVAL_SECONDS`：日志清理任务执行间隔
+- `LOG_RETENTION_DAYS`：日志保留天数
 
 备份云存储测试变量（用于 E2E/测试直连云端）：
 - `TEST_BACKUP_USE_ENV`：开发环境是否强制启用 `TEST_BACKUP_*` 覆盖（`1/true` 生效）

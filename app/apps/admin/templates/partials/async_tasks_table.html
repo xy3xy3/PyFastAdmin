@@ -1,0 +1,102 @@
+<div id="async_tasks-table" class="card p-5">
+  <div class="flex flex-wrap items-center justify-between gap-3">
+    <div>
+      <h2 class="text-lg font-semibold text-slate-900">周期任务列表</h2>
+      <p class="mt-1 text-sm text-slate-500">共 {{ pagination.total }} 条任务</p>
+    </div>
+
+    <button
+      class="btn-ghost px-3"
+      hx-get="/admin/async_tasks/table"
+      hx-target="#async_tasks-table"
+      hx-swap="outerHTML"
+      hx-indicator="#global-indicator"
+      hx-vals='{{ {"search_q": filters.search_q, "tab": filters.tab, "page": pagination.page}|tojson }}'
+      title="刷新"
+      aria-label="刷新"
+    >
+      <i class="fa-solid fa-rotate-right" aria-hidden="true"></i>
+    </button>
+  </div>
+
+  <div class="mt-4 overflow-x-auto rounded-lg border border-slate-200">
+    <table class="w-full min-w-[1220px] text-left text-sm">
+      <thead class="bg-slate-50 text-slate-600">
+        <tr>
+          {% for column in columns %}
+            <th class="px-4 py-3 font-medium">{{ column.label }}</th>
+          {% endfor %}
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in rows %}
+          <tr class="border-t border-slate-100">
+            {% for column in columns %}
+              {% set value = row.values.get(column.key, '-') %}
+              <td class="px-4 py-3 {% if column.key == 'name' %}text-slate-900{% else %}text-slate-600{% endif %}">
+                {% if column.key == 'last_status' %}
+                  {% if value == 'success' %}
+                    <span class="tag bg-emerald-50 border-emerald-100 text-emerald-700">success</span>
+                  {% elif value == 'failed' %}
+                    <span class="tag bg-red-50 border-red-100 text-red-600">failed</span>
+                  {% elif value == 'running' %}
+                    <span class="tag bg-blue-50 border-blue-100 text-blue-700">running</span>
+                  {% else %}
+                    <span class="tag">idle</span>
+                  {% endif %}
+                {% else %}
+                  <span>{{ value }}</span>
+                {% endif %}
+              </td>
+            {% endfor %}
+          </tr>
+        {% else %}
+          <tr>
+            <td class="px-4 py-8 text-center text-sm text-slate-500" colspan="{{ columns|length }}">暂无匹配任务。</td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  <div class="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-slate-100 pt-4">
+    <p class="text-xs text-slate-500">显示 {{ pagination.start_item }} - {{ pagination.end_item }} / {{ pagination.total }}</p>
+
+    <div class="flex flex-wrap items-center gap-2">
+      <button
+        class="btn-ghost px-3 {% if not pagination.has_prev %}opacity-50 pointer-events-none{% endif %}"
+        hx-get="/admin/async_tasks/table"
+        hx-target="#async_tasks-table"
+        hx-swap="outerHTML"
+        hx-indicator="#global-indicator"
+        hx-vals='{{ {"search_q": filters.search_q, "tab": filters.tab, "page": pagination.prev_page}|tojson }}'
+        {% if not pagination.has_prev %}disabled{% endif %}
+      >
+        上一页
+      </button>
+      {% for p in pagination.pages %}
+        <button
+          class="{% if p == pagination.page %}btn-primary{% else %}btn-ghost{% endif %} px-3"
+          hx-get="/admin/async_tasks/table"
+          hx-target="#async_tasks-table"
+          hx-swap="outerHTML"
+          hx-indicator="#global-indicator"
+          hx-vals='{{ {"search_q": filters.search_q, "tab": filters.tab, "page": p}|tojson }}'
+        >
+          {{ p }}
+        </button>
+      {% endfor %}
+      <button
+        class="btn-ghost px-3 {% if not pagination.has_next %}opacity-50 pointer-events-none{% endif %}"
+        hx-get="/admin/async_tasks/table"
+        hx-target="#async_tasks-table"
+        hx-swap="outerHTML"
+        hx-indicator="#global-indicator"
+        hx-vals='{{ {"search_q": filters.search_q, "tab": filters.tab, "page": pagination.next_page}|tojson }}'
+        {% if not pagination.has_next %}disabled{% endif %}
+      >
+        下一页
+      </button>
+    </div>
+  </div>
+</div>

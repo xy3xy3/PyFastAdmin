@@ -9,11 +9,12 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 # 使用 uv 安装依赖
 RUN pip install --no-cache-dir uv
 
-COPY pyproject.toml README.md /app/
+COPY pyproject.toml uv.lock README.md /app/
 RUN uv sync --system --no-dev
 
 COPY app /app/app
+COPY main.py /app/main.py
 
 EXPOSE 8000
 
-CMD ["sh", "-c", "uvicorn app.main:app --host 0.0.0.0 --port ${APP_PORT:-8000}"]
+CMD ["sh", "-c", "uv run main.py"]

@@ -8,7 +8,7 @@ from motor.motor_asyncio import AsyncIOMotorClient
 from beanie import init_beanie
 
 from .config import MONGO_DB, MONGO_URL
-from .models import AdminUser, Role, ConfigItem, OperationLog, BackupRecord
+from .models import AdminUser, Role, ConfigItem, OperationLog, BackupRecord, AsyncTasksItem, QueueConsumersItem
 
 _mongo_client: AsyncIOMotorClient | None = None
 
@@ -20,7 +20,7 @@ async def init_db() -> None:
     await init_beanie(
         # Motor 与 Beanie 的类型标注来源不同，这里显式转换避免类型检查误报。
         database=cast(Any, _mongo_client[MONGO_DB]),
-        document_models=[Role, AdminUser, ConfigItem, OperationLog, BackupRecord],
+        document_models=[Role, AdminUser, ConfigItem, OperationLog, BackupRecord, AsyncTasksItem, QueueConsumersItem],
     )
 
 

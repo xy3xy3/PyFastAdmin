@@ -52,6 +52,20 @@ def test_build_navigation_context_matches_longest_prefix() -> None:
 
 
 @pytest.mark.unit
+def test_build_navigation_context_supports_async_monitor_pages() -> None:
+    permission_map = {
+        "async_tasks": {"read"},
+        "queue_consumers": {"read"},
+    }
+    flags = permission_service.build_permission_flags(permission_map)
+
+    nav = navigation.build_navigation_context("/admin/queue_consumers", flags)
+
+    assert nav["breadcrumb_parent"] == "系统工具"
+    assert nav["breadcrumb_title"] == "队列消费"
+
+
+@pytest.mark.unit
 def test_build_admin_nav_tree_supports_generated_override(tmp_path, monkeypatch) -> None:
     payload = {
         "group_key": "security",

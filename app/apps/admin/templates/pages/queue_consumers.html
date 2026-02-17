@@ -1,0 +1,59 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="space-y-4" x-data='{{ {"search_q": filters.search_q, "tab": filters.tab, "page": pagination.page}|tojson }}'>
+  <section class="card p-5">
+    <div class="flex flex-wrap items-center justify-between gap-3">
+      <div>
+        <h1 class="text-lg font-semibold text-slate-900">队列消费监控</h1>
+        <p class="text-sm text-slate-500">查看 Redis Streams 消费状态、重试与死信统计</p>
+      </div>
+      <div class="inline-flex rounded-md border border-slate-200 bg-white p-1">
+        {% for tab_item in tabs %}
+          <button
+            type="button"
+            class="rounded-md border px-3 py-1.5 text-sm font-medium transition-colors"
+            :class="tab === '{{ tab_item.key }}' ? 'border-blue-200 bg-blue-50 text-blue-700' : 'border-transparent text-slate-600 hover:border-slate-200 hover:bg-slate-50'"
+            x-on:click="tab='{{ tab_item.key }}'; page=1; $nextTick(() => document.getElementById('queue_consumers-search-form').requestSubmit())"
+          >
+            {{ tab_item.name }}
+          </button>
+        {% endfor %}
+      </div>
+    </div>
+
+    <form
+      id="queue_consumers-search-form"
+      class="mt-4 grid gap-4 md:grid-cols-12"
+      hx-get="/admin/queue_consumers/table"
+      hx-target="#queue_consumers-table"
+      hx-swap="outerHTML"
+      hx-indicator="#global-indicator"
+      x-on:submit="page = 1"
+    >
+      <input type="hidden" name="page" x-model="page" />
+      <input type="hidden" name="tab" x-model="tab" />
+
+      <div class="md:col-span-9">
+        <label class="label">关键词</label>
+        <input name="search_q" x-model="search_q" class="input" placeholder="消费者名称 / key / stream / group" />
+      </div>
+
+      <div class="md:col-span-3 flex flex-wrap items-end justify-end gap-3">
+        <button
+          type="button"
+          class="btn-ghost"
+          x-on:click="search_q=''; tab='all'; page=1; $nextTick(() => $el.form.requestSubmit())"
+        >
+          重置
+        </button>
+        <button type="submit" class="btn-primary">搜索</button>
+      </div>
+    </form>
+  </section>
+
+  <section>
+    {% include "partials/queue_consumers_table.html" %}
+  </section>
+</div>
+{% endblock %}

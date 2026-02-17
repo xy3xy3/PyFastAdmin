@@ -18,6 +18,8 @@ MODULE_LABELS: dict[str, str] = {
     "config": "系统配置",
     "logs": "操作日志",
     "backup": "数据备份",
+    "async_tasks": "异步任务",
+    "queue_consumers": "队列消费",
 }
 
 AuditAction = Literal["create", "read", "update", "delete", "trigger", "restore", "update_self"]

@@ -1,0 +1,13 @@
+{
+  "group_key": "system",
+  "node": {
+    "resource": "queue_consumers",
+    "name": "队列消费",
+    "url": "/admin/queue_consumers",
+    "icon": "fa-solid fa-list-check",
+    "menu_visible": true,
+    "match_prefixes": [
+      "/admin/queue_consumers"
+    ]
+  }
+}

@@ -1,7 +1,6 @@
 services:
   mongo:
     image: swr.cn-north-4.myhuaweicloud.com/ddn-k8s/docker.io/mongodb/mongodb-community-server:8.0.17-ubi9
-    container_name: pyfastadmin-mongo
     restart: unless-stopped
     environment:
       MONGODB_INITDB_ROOT_USERNAME: ${MONGO_ROOT_USERNAME:?MONGO_ROOT_USERNAME is required}
@@ -9,13 +8,12 @@ services:
       MONGO_INITDB_ROOT_USERNAME: ${MONGO_ROOT_USERNAME:?MONGO_ROOT_USERNAME is required}
       MONGO_INITDB_ROOT_PASSWORD: ${MONGO_ROOT_PASSWORD:?MONGO_ROOT_PASSWORD is required}
     ports:
-      - "${MONGO_PORT:-27017}:27017"
+      - "127.0.0.1::27017"
     volumes:
       - mongo_data:/data/db
 
   redis:
     image: swr.cn-north-4.myhuaweicloud.com/ddn-k8s/docker.io/library/redis:8.2.2-bookworm
-    container_name: pyfastadmin-redis
     restart: unless-stopped
     command:
       - redis-server
@@ -24,7 +22,7 @@ services:
       - --appendonly
       - "yes"
     ports:
-      - "${REDIS_PORT:-6379}:6379"
+      - "127.0.0.1::6379"
     volumes:
       - redis_data:/data
 

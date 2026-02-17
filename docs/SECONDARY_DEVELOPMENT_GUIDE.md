@@ -71,15 +71,15 @@
 ### dev 清库重启
 ```bash
 cd deploy/dev
-docker compose --env-file ../../.env down -v --remove-orphans
-docker compose --env-file ../../.env up -d
+docker compose -p pyfastadmin-dev --env-file ../../.env down -v --remove-orphans
+docker compose -p pyfastadmin-dev --env-file ../../.env up -d
 ```
 
 ### prod 清库重启
 ```bash
 cd deploy/product
-docker compose --env-file ../../.env down -v --remove-orphans
-docker compose --env-file ../../.env up -d --build
+docker compose -p pyfastadmin-prod --env-file ../../.env down -v --remove-orphans
+docker compose -p pyfastadmin-prod --env-file ../../.env up -d --build
 ```
 
 说明：会删除生产数据，必须先备份。

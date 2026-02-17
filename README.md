@@ -24,7 +24,7 @@ HTMX + Alpine.js + Tailwind + FastAPI + Jinja2 + Beanie 的不分离管理后台
 ```bash
 # 先在 .env 配置 MONGO_ROOT_USERNAME / MONGO_ROOT_PASSWORD / REDIS_PASSWORD
 cd deploy/dev
-docker compose --env-file ../../.env up -d
+docker compose -p pyfastadmin-dev --env-file ../../.env up -d
 ```
 
 2. 安装前端依赖并构建 Tailwind
@@ -47,6 +47,8 @@ uv sync
 ```bash
 uv run main.py
 ```
+
+注意：`uv run main.py` 需要在项目根目录执行（即 `main.py` 所在目录）。
 
 访问：http://localhost:8000/admin/rbac
 - 权限树配置：http://localhost:8000/admin/rbac/permissions
@@ -102,6 +104,8 @@ uv run pytest -m e2e
 - `tests/e2e/`：自动拉起独立 MongoDB + Redis，测试结束自动清理
 - 若出现 “MongoDB 不可用” 或 `dropDatabase` 相关报错，请先确认开发库已启动，并优先使用具备测试库权限的 `TEST_MONGO_URL`：
   - `cd deploy/dev && docker compose --env-file ../../.env up -d`
+  - 建议固定 project 名避免误删其他 `dev` 目录容器：
+    `cd deploy/dev && docker compose -p pyfastadmin-dev --env-file ../../.env up -d`
 
 ## 清空数据后重启
 
@@ -109,8 +113,8 @@ uv run pytest -m e2e
 
 ```bash
 cd deploy/dev
-docker compose --env-file ../../.env down -v --remove-orphans
-docker compose --env-file ../../.env up -d
+docker compose -p pyfastadmin-dev --env-file ../../.env down -v --remove-orphans
+docker compose -p pyfastadmin-dev --env-file ../../.env up -d
 ```
 
 说明：会清空开发库 MongoDB/Redis 的 volume 数据。
@@ -119,8 +123,8 @@ docker compose --env-file ../../.env up -d
 
 ```bash
 cd deploy/product
-docker compose --env-file ../../.env down -v --remove-orphans
-docker compose --env-file ../../.env up -d --build
+docker compose -p pyfastadmin-prod --env-file ../../.env down -v --remove-orphans
+docker compose -p pyfastadmin-prod --env-file ../../.env up -d --build
 ```
 
 说明：会清空生产库数据，请确认已完成备份后再执行。
@@ -138,7 +142,7 @@ docker compose -f deploy/e2e/docker-compose.yml --project-name <pyfastadmin-e2e-
 
 ```bash
 cd deploy/product
-docker compose --env-file ../../.env up -d --build
+docker compose -p pyfastadmin-prod --env-file ../../.env up -d --build
 ```
 
 ## 环境变量

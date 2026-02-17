@@ -1,7 +1,8 @@
+name: pyfastadmin-prod
+
 services:
   mongo:
     image: swr.cn-north-4.myhuaweicloud.com/ddn-k8s/docker.io/mongodb/mongodb-community-server:8.0.17-ubi9
-    container_name: pyfastadmin-mongo
     restart: unless-stopped
     environment:
       MONGODB_INITDB_ROOT_USERNAME: ${MONGO_ROOT_USERNAME:?MONGO_ROOT_USERNAME is required}
@@ -15,7 +16,6 @@ services:
 
   redis:
     image: swr.cn-north-4.myhuaweicloud.com/ddn-k8s/docker.io/library/redis:8.2.2-bookworm
-    container_name: pyfastadmin-redis
     restart: unless-stopped
     command:
       - redis-server
@@ -32,7 +32,6 @@ services:
     build:
       context: ../..
       dockerfile: deploy/product/Dockerfile
-    container_name: pyfastadmin-app
     restart: unless-stopped
     environment:
       APP_PORT: ${APP_PORT:-8000}

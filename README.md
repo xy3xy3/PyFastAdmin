@@ -62,7 +62,7 @@ uv run main.py
 
 ## 测试（单元 / 集成 / E2E）
 
-> 测试会使用 **独立 MongoDB 数据库**，不污染主库。
+> E2E 会自动拉起独立 MongoDB + Redis（随机端口 + 随机密码 + 独立 compose project），不污染开发/生产环境。
 
 1. 默认会自动加载项目 `.env`（无需手动 `export`）
 
@@ -99,9 +99,40 @@ uv run pytest -m e2e
 说明：
 - `tests/unit/`：不依赖数据库
 - `tests/integration/`：自动清理 `TEST_MONGO_DB`
-- `tests/e2e/`：启动独立服务并使用 `TEST_E2E_MONGO_DB`
+- `tests/e2e/`：自动拉起独立 MongoDB + Redis，测试结束自动清理
 - 若出现 “MongoDB 不可用” 或 `dropDatabase` 相关报错，请先确认开发库已启动，并优先使用具备测试库权限的 `TEST_MONGO_URL`：
   - `cd deploy/dev && docker compose --env-file ../../.env up -d`
+
+## 清空数据后重启
+
+### 开发环境（`deploy/dev`）
+
+```bash
+cd deploy/dev
+docker compose --env-file ../../.env down -v --remove-orphans
+docker compose --env-file ../../.env up -d
+```
+
+说明：会清空开发库 MongoDB/Redis 的 volume 数据。
+
+### 生产环境（`deploy/product`）
+
+```bash
+cd deploy/product
+docker compose --env-file ../../.env down -v --remove-orphans
+docker compose --env-file ../../.env up -d --build
+```
+
+说明：会清空生产库数据，请确认已完成备份后再执行。
+
+### E2E 环境（自动）
+
+- `uv run pytest -m e2e` 默认会自动拉起并自动清理独立数据库容器。
+- 如遇异常中断导致残留，可手动清理指定 project：
+
+```bash
+docker compose -f deploy/e2e/docker-compose.yml --project-name <pyfastadmin-e2e-xxxx> down -v --remove-orphans
+```
 
 ## 生产部署（含 uv Dockerfile）
 

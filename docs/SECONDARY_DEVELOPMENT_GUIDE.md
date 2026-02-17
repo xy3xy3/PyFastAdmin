@@ -1,4 +1,4 @@
-# PyFastAdmin 二开指南（9 步）
+# PyFastAdmin 二开指南（11 步）
 
 > 目标：让业务项目在保留原有 RBAC / HTMX / 审计能力的前提下，快速迁移和扩展模块。
 
@@ -51,6 +51,45 @@
 - `uv run python -m compileall app tests`
 - 若修改 Tailwind 源样式：`pnpm build:css`
 - 权限场景人工回归：按钮隐藏 + 接口 403 + 日志可追踪。
+
+## 10) Redis 队列与异步任务扩展
+- 启动入口统一使用 `uv run main.py`，通过环境变量控制进程数：
+  - `HTTP_WORKERS`
+  - `QUEUE_WORKERS`
+  - `PERIODIC_WORKERS`
+- 队列采用 Redis Streams（`XADD` / `XREADGROUP` / `XACK`），失败自动重试，超过阈值进入死信流。
+- 新增周期任务：
+  - 在 `app/tasks/` 注册 `register_periodic_task(...)`
+  - 可选 `tags` + `display_columns` + `display_values_provider`，自动上屏 `/admin/async_tasks`
+- 新增队列消费者：
+  - 在 `app/tasks/` 注册 `register_queue_consumer(...)`
+  - 可选 `tags` + `display_columns` + `display_values_provider`，自动上屏 `/admin/queue_consumers`
+- 开发者新增任务时，优先“后端注册驱动前端展示”，避免重复加页面模板。
+
+## 11) 清空数据后重启（dev/prod/e2e）
+
+### dev 清库重启
+```bash
+cd deploy/dev
+docker compose --env-file ../../.env down -v --remove-orphans
+docker compose --env-file ../../.env up -d
+```
+
+### prod 清库重启
+```bash
+cd deploy/product
+docker compose --env-file ../../.env down -v --remove-orphans
+docker compose --env-file ../../.env up -d --build
+```
+
+说明：会删除生产数据，必须先备份。
+
+### e2e 清理
+- E2E 默认自动拉起并自动销毁独立 MongoDB + Redis（随机端口，不占用固定端口）。
+- 若测试异常中断导致容器残留，执行：
+```bash
+docker compose -f deploy/e2e/docker-compose.yml --project-name <pyfastadmin-e2e-xxxx> down -v --remove-orphans
+```
 
 ---
 

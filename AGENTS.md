@@ -21,7 +21,8 @@
 - 禁止直接使用 `python` / `python3` 裸命令。
 - 常用命令：
   - 安装依赖：`uv sync`
-  - 启动服务：`uv run uvicorn app.main:app --reload --port ${APP_PORT:-8000}`
+  - 启动服务（统一主入口）：`uv run main.py`
+  - 本地仅调 HTTP（禁用异步 worker）：`HTTP_WORKERS=1 QUEUE_WORKERS=0 PERIODIC_WORKERS=0 uv run main.py`
 
 ### 1.2 Node / Tailwind
 - Node 包管理只用 `pnpm`，禁止 `npm`。
@@ -33,9 +34,13 @@
   - 构建 CSS：`pnpm build:css`
   - 开发监听：`pnpm dev:css`
 
-### 1.3 MongoDB（开发）
-- 开发环境 MongoDB 在 `deploy/dev`。
+### 1.3 MongoDB + Redis（开发）
+- 开发环境 MongoDB + Redis 在 `deploy/dev`。
 - 启动：`cd deploy/dev && docker compose --env-file ../../.env up -d`
+- `.env` 必须提供：
+  - `MONGO_ROOT_USERNAME`
+  - `MONGO_ROOT_PASSWORD`
+  - `REDIS_PASSWORD`
 
 ---
 
@@ -54,7 +59,17 @@
   - 表格/弹窗等局部：`partials/`
 - 全局前端交互：`app/static/js/app.js`
 - 日志服务：`app/services/log_service.py`
+- Redis 连接：`app/services/redis_service.py`
+- 队列服务：`app/services/queue_service.py`
+- 周期任务服务：`app/services/periodic_service.py`
+- 任务注册中心：`app/services/task_registry.py`
+- 任务监控服务：`app/services/task_monitor_service.py`
+- 主控编排器：`app/services/process_supervisor.py`
+- 工作进程：`app/workers/`
+- 任务注册目录：`app/tasks/`
 - 模块脚手架命令：`scripts/generate_admin_module.py`
+- 统一启动入口：`main.py`
+- E2E 独立数据库编排：`deploy/e2e/docker-compose.yml`
 - 测试：`tests/unit`、`tests/integration`、`tests/e2e`
 
 ---
@@ -225,3 +240,88 @@
 2. `README.md`（运行/部署/测试）
 3. 现有同类页面实现（优先复用已有模式）
 4. 最后才做新的模式设计（避免破坏整体风格）
+
+---
+
+## 11. Redis 队列与异步任务开发教程
+
+### 11.1 启动模型与进程参数
+- 统一使用 `uv run main.py`，由主控进程拉起：
+  - HTTP 进程（Uvicorn）
+  - Queue Worker 进程
+  - Periodic Worker 进程
+- 核心环境变量：
+  - `HTTP_WORKERS`：HTTP worker 数（>=1）
+  - `QUEUE_WORKERS`：队列消费 worker 数（>=0）
+  - `PERIODIC_WORKERS`：周期任务 worker 数（>=0）
+  - `UVICORN_HOST` / `APP_PORT` / `UVICORN_LOG_LEVEL` / `UVICORN_RELOAD`
+- 队列与任务参数：
+  - `REDIS_URL`
+  - `QUEUE_MAX_RETRIES`
+  - `QUEUE_BLOCK_MS`
+  - `LOG_CLEANUP_INTERVAL_SECONDS`
+  - `LOG_RETENTION_DAYS`
+- 禁止在 `app/main.py` 的 HTTP 生命周期里直接拉起调度器，避免多 worker 重复执行。
+
+### 11.2 队列模型（Redis Streams）
+- 使用 `Redis Streams + Consumer Group`。
+- 投递：`enqueue_task(...)`（`XADD`）。
+- 消费：`XREADGROUP`，成功后 `XACK`。
+- 失败策略：
+  - handler 抛异常 -> 自动重试
+  - 超过最大重试后进入死信流（默认 `<stream>:dead`）
+- 消息字段约定（由 `queue_service` 维护）：
+  - `payload`
+  - `retry_count`
+  - `source_message_id`
+
+### 11.3 新增队列消费者（注册即可上屏）
+1. 在 `app/tasks/` 新建任务注册文件，编写 handler（异步函数）。
+2. 使用 `register_queue_consumer(...)` 注册，至少声明：
+   - `key`、`name`、`stream`、`group`、`handler`
+3. 若要在监控页展示额外字段，补充：
+   - `tags`（用于 Tab）
+   - `display_columns`
+   - `display_values_provider`
+4. 在 `app/tasks/__init__.py` 的 `load_builtin_tasks()` 中导入并调用你的注册函数（保持幂等）。
+5. 新增消费者后，无需改前端模板，会自动出现在 `/admin/queue_consumers`。
+
+示例（最小注册）：
+```python
+from app.services.task_registry import register_queue_consumer
+
+async def handle_demo(payload: dict, meta: dict) -> None:
+    # 抛异常会触发重试/死信
+    return
+
+register_queue_consumer(
+    key="demo_consumer",
+    name="示例消费者",
+    stream="pfa:queue:demo",
+    group="pfa_demo_group",
+    handler=handle_demo,
+    tags=["system", "demo"],
+)
+```
+
+### 11.4 新增周期任务（定时执行）
+1. 在 `app/tasks/` 注册 `register_periodic_task(...)`。
+2. 声明 `interval_seconds` 与 `runner`。
+3. 可选声明 `tags`、`display_columns`、`display_values_provider`，自动进入 `/admin/async_tasks`。
+4. `PERIODIC_WORKERS > 1` 时，任务会按索引分片，避免重复跑同一任务。
+
+### 11.5 监控页面与 RBAC
+- 两个独立页面（只读）：
+  - `/admin/async_tasks`
+  - `/admin/queue_consumers`
+- 对应资源建议维持 `actions=["read"]`，菜单显隐由 `read` 控制。
+- 页面 Tab 来源于任务 `tags`；动态列来源于 `display_columns`。
+- 页面访问与筛选请求必须记录操作日志（`action="read"`）。
+
+### 11.6 E2E 独立数据库（防污染）
+- E2E 使用 `deploy/e2e/docker-compose.yml` 自动拉起独立 MongoDB + Redis。
+- 端口采用 Docker 随机分配，避免与本机现有容器冲突。
+- 会话结束自动 `down -v`，不污染开发/生产环境数据。
+- 运行方式：
+  - 单条：`uv run pytest tests/e2e/xxx.py -m e2e`
+  - 全量：`uv run pytest tests/e2e -m e2e`

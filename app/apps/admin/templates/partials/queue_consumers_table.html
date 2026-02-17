@@ -32,7 +32,7 @@
         {% for row in rows %}
           <tr class="border-t border-slate-100">
             {% for column in columns %}
-              {% set value = row.values.get(column.key, '-') %}
+              {% set value = row['values'].get(column.key, '-') %}
               <td class="px-4 py-3 {% if column.key == 'name' %}text-slate-900{% else %}text-slate-600{% endif %}">
                 {% if column.key == 'last_status' %}
                   {% if value == 'success' %}

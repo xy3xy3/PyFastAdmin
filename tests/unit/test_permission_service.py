@@ -5,7 +5,7 @@ from types import SimpleNamespace
 from typing import cast
 
 import pytest
-from fastapi import Request
+from fastapi import APIRouter, Request
 from fastapi.routing import APIRoute
 
 from app.main import app
@@ -219,6 +219,29 @@ def test_required_permission_prefers_explicit_route_declaration() -> None:
     assert permission_service.required_permission("/admin/backup/demo/restore", "POST") == ("backup_records", "restore")
     assert permission_service.required_permission("/admin/profile", "POST") == ("profile", "update_self")
     assert permission_service.required_permission("/admin/password", "POST") == ("password", "update_self")
+
+
+@pytest.mark.unit
+def test_required_permission_supports_explicit_meta_on_unregistered_path() -> None:
+    """未知路径只要显式声明权限元数据，也应被鉴权规则识别。"""
+
+    router = APIRouter(prefix="/admin")
+
+    @router.get(
+        "/it_explicit_permission",
+        openapi_extra={"permission": {"resource": "admin_users", "action": "read"}},
+    )
+    async def _it_explicit_permission() -> dict[str, bool]:
+        return {"ok": True}
+
+    base_route_count = len(app.router.routes)
+    app.include_router(router)
+    permission_service._build_permission_rules.cache_clear()
+    try:
+        assert permission_service.required_permission("/admin/it_explicit_permission", "GET") == ("admin_users", "read")
+    finally:
+        del app.router.routes[base_route_count:]
+        permission_service._build_permission_rules.cache_clear()
 
 
 @pytest.mark.unit

@@ -185,7 +185,7 @@ async def backup_trigger(request: Request) -> dict[str, Any]:
 
     await log_service.record_request(
         request,
-        action="create",
+        action="trigger",
         module="backup",
         target="手动备份",
         detail=f"手动触发数据库备份，状态：{record.status}",
@@ -217,7 +217,7 @@ async def backup_restore(request: Request, record_id: str) -> dict[str, Any]:
 
     await log_service.record_request(
         request,
-        action="update",
+        action="restore",
         module="backup",
         target="恢复备份",
         target_id=record_id,

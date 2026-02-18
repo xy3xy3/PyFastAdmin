@@ -25,14 +25,17 @@ SMTP_META = {
     "smtp_ssl": "启用 SSL (true/false)",
 }
 
-AUDIT_ACTION_ORDER = ["create", "read", "update", "delete"]
+AUDIT_ACTION_ORDER = ["create", "read", "update", "delete", "trigger", "restore", "update_self"]
 AUDIT_ACTION_LABELS = {
     "create": "新增",
     "read": "查询",
     "update": "修改",
     "delete": "删除",
+    "trigger": "触发",
+    "restore": "恢复",
+    "update_self": "修改本人",
 }
-AUDIT_DEFAULT_ACTIONS = ["create", "update", "delete"]
+AUDIT_DEFAULT_ACTIONS = ["create", "update", "delete", "trigger", "restore", "update_self"]
 AUDIT_CONFIG_KEY = "audit_log_actions"
 
 

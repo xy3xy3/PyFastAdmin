@@ -217,14 +217,16 @@ uv run python scripts/generate_admin_module.py inventory --name "库存管理" -
 2. 按业务调整模型字段/索引和服务层读写逻辑（脚手架提供的是通用 CRUD 起点）。
 3. 按业务补齐表单字段、筛选、分页和错误提示。
 4. 保持按钮权限与后端权限一致（只隐藏按钮不算完成）。
-5. 补充操作日志（至少 create/read/update/delete）。
+5. 补充操作日志（按语义记录 `create/read/update/delete/trigger/restore/update_self`）。
 6. 做移动端和桌面端检查（尤其表格横向滚动）。
 7. 如需调整菜单分组/图标/命名，优先改 `app/apps/admin/nav_generated/<module>.json`。
+8. 新增或修改 `registry_generated/*.json`、`nav_generated/*.json` 后，重启服务（`uv run main.py`）让权限映射与导航缓存重新构建。
 
 ### 4) RBAC 显式权限声明（强烈建议）
 - 推荐在路由上使用：
   - `@permission_decorator.permission_meta("resource", "action")`
 - 自动推断仍可用，但只作为兜底。
+- 显式声明优先级高于路径自动推断；即使是未登记到 registry 的临时路径，也可以通过显式声明进入鉴权。
 - 批量操作、导入导出、非标准路径务必显式声明，降低误判风险。
 
 ### 5) 角色权限导入导出（JSON）
@@ -248,6 +250,7 @@ uv run python -m compileall app tests scripts
 
 # 若改了导入导出/权限映射，建议追加
 uv run pytest tests/integration/test_rbac_role_transfer.py -m integration
+uv run pytest tests/integration/test_auto_nav_injection.py -m integration
 ```
 
 ### 7) 更多二开细则

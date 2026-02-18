@@ -302,10 +302,6 @@ def _build_permission_rules() -> tuple[PermissionRouteRule, ...]:
         if route_path.startswith("/admin/login") or route_path == "/admin/logout":
             continue
 
-        resource = _resolve_resource_from_path(route_path)
-        if not resource:
-            continue
-
         methods = {method for method in (route.methods or set()) if method in {"GET", "POST", "PUT", "PATCH", "DELETE"}}
         path_regex = _compile_route_regex(route.path)
 
@@ -313,11 +309,24 @@ def _build_permission_rules() -> tuple[PermissionRouteRule, ...]:
             explicit = _resolve_explicit_permission(route, method)
             if explicit is not None:
                 resource_key, action = explicit
-            else:
-                action = _infer_action(resource, method, route.path)
-                resource_key = resource
-                if not action:
-                    continue
+                rules.append(
+                    PermissionRouteRule(
+                        path_regex=path_regex,
+                        method=method,
+                        resource=resource_key,
+                        action=action,
+                    )
+                )
+                continue
+
+            # 显式权限优先：仅在未声明 permission_meta/openapi_extra 时才走路径推断。
+            resource_key = _resolve_resource_from_path(route_path)
+            if not resource_key:
+                continue
+
+            action = _infer_action(resource_key, method, route.path)
+            if not action:
+                continue
 
             rules.append(
                 PermissionRouteRule(

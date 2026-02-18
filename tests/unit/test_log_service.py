@@ -14,6 +14,9 @@ from app.services.log_service import get_request_ip, normalize_log_action
 def test_normalize_log_action() -> None:
     assert normalize_log_action('CREATE') == 'create'
     assert normalize_log_action(' update ') == 'update'
+    assert normalize_log_action(' trigger ') == 'trigger'
+    assert normalize_log_action('restore') == 'restore'
+    assert normalize_log_action('UPDATE_SELF') == 'update_self'
     assert normalize_log_action('noop') == ''
 
 

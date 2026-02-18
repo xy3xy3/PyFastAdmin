@@ -9,6 +9,7 @@
 - 每个资源必须声明 `key/name/url/actions`，`actions` 建议固定为 `create/read/update/delete`。
 - 新增后请确认 `permission_service.build_permission_flags` 能自动识别到资源。
 - 若需把资源挂到已有权限分组，`group_key` 使用 `security`、`accounts`、`system` 之一；若使用新 key，会在权限树里生成新分组（分组名默认等于 key，必要时到 `app/apps/admin/registry.py` 的 `BASE_ADMIN_TREE` 手动补中文名和排序）。
+- 新增或修改 `registry_generated/*.json`、`nav_generated/*.json` 后，需重启服务（`uv run main.py`）使权限映射与导航缓存生效。
 
 ## 2) 自动注入侧边菜单与面包屑
 - 导航由 `app/apps/admin/navigation.py` 统一构建，默认从 `registry.py + registry_generated/*.json` 自动推导。
@@ -19,6 +20,7 @@
 ## 3) 新增路由
 - 控制器放在 `app/apps/admin/controllers/`，路由统一 `prefix="/admin"`。
 - 推荐使用显式权限声明：`@permission_decorator.permission_meta("resource", "action")`。
+- 显式权限声明优先级高于自动推断；未在 registry 注册的临时路径也可通过显式声明参与鉴权。
 - 约定式推断仍可用，但只作为兜底，复杂路由（批量、导入导出）必须显式声明。
 
 ## 4) 模板按钮权限控制
@@ -34,6 +36,7 @@
 ## 6) 操作日志
 - 页面访问与 CRUD 都应调用 `log_service.record_request(...)`。
 - 最少包含：`action/module/target/detail`。
+- `action` 建议按语义填写：`create/read/update/delete/trigger/restore/update_self`。
 - 导入导出、密码修改、个人资料、登录登出等关键动作也要落日志。
 
 ## 7) 测试补齐
@@ -49,6 +52,7 @@
 ## 9) 交付前自检
 - `uv run pytest -m unit`
 - `uv run python -m compileall app tests`
+- `uv run pytest tests/integration/test_auto_nav_injection.py -m integration`
 - 若修改 Tailwind 源样式：`pnpm build:css`
 - 权限场景人工回归：按钮隐藏 + 接口 403 + 日志可追踪。
 

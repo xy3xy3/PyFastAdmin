@@ -162,7 +162,7 @@ async def profile_update(
     if email_error:
         await log_service.record_request(
             request,
-            action="update",
+            action="update_self",
             module="auth",
             target="个人资料",
             target_id=str(admin.id),
@@ -187,7 +187,7 @@ async def profile_update(
     request.session["admin_name"] = display_name_value
     await log_service.record_request(
         request,
-        action="update",
+        action="update_self",
         module="auth",
         target="个人资料",
         target_id=str(admin.id),
@@ -251,7 +251,7 @@ async def password_update(
     if len(new_password) < 6:
         await log_service.record_request(
             request,
-            action="update",
+            action="update_self",
             module="auth",
             target="修改密码",
             target_id=str(admin.id),
@@ -266,7 +266,7 @@ async def password_update(
     if new_password != confirm_password:
         await log_service.record_request(
             request,
-            action="update",
+            action="update_self",
             module="auth",
             target="修改密码",
             target_id=str(admin.id),
@@ -282,7 +282,7 @@ async def password_update(
     if not ok:
         await log_service.record_request(
             request,
-            action="update",
+            action="update_self",
             module="auth",
             target="修改密码",
             target_id=str(admin.id),
@@ -296,7 +296,7 @@ async def password_update(
 
     await log_service.record_request(
         request,
-        action="update",
+        action="update_self",
         module="auth",
         target="修改密码",
         target_id=str(admin.id),

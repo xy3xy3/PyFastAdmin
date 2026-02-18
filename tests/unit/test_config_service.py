@@ -10,8 +10,8 @@ from app.services.config_service import normalize_audit_actions
 
 @pytest.mark.unit
 def test_normalize_audit_actions_deduplicate_and_sort() -> None:
-    values = ['delete', 'create', 'delete', 'read', 'unknown', 'update']
-    assert normalize_audit_actions(values) == ['create', 'read', 'update', 'delete']
+    values = ['delete', 'create', 'delete', 'read', 'unknown', 'update', 'restore', 'update_self', 'trigger']
+    assert normalize_audit_actions(values) == ['create', 'read', 'update', 'delete', 'trigger', 'restore', 'update_self']
 
 
 @pytest.mark.unit

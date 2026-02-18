@@ -80,6 +80,10 @@ def test_render_table_includes_bulk_delete_controls(scaffold_module) -> None:
     assert "pagination.pages" in rendered
     assert '"search_q": filters.search_q' in rendered
     assert '"page": pagination.page' in rendered
+    assert 'class="admin-table-wrap"' in rendered
+    assert 'class="admin-table min-w-[780px]"' in rendered
+    assert 'class="mt-4 admin-table-wrap"' in rendered
+    assert 'class="admin-table min-w-[720px]"' in rendered
 
 
 @pytest.mark.unit

@@ -694,8 +694,8 @@ def render_table(module: str, title: str) -> str:
         <button type="button" class="btn-ghost px-3" data-bulk-action="invert">反选</button>
       </div>
 
-      <div class="overflow-x-auto rounded-lg border border-slate-200">
-        <table class="w-full min-w-[780px] text-left text-sm">
+      <div class="admin-table-wrap">
+        <table class="admin-table min-w-[780px]">
           <thead class="bg-slate-50 text-slate-600">
             <tr>
               <th class="w-12 px-4 py-3 text-center font-medium">
@@ -785,8 +785,8 @@ def render_table(module: str, title: str) -> str:
       </div>
     </form>
   {{% else %}}
-    <div class="mt-4 overflow-x-auto rounded-lg border border-slate-200">
-      <table class="w-full min-w-[720px] text-left text-sm">
+    <div class="mt-4 admin-table-wrap">
+      <table class="admin-table min-w-[720px]">
         <thead class="bg-slate-50 text-slate-600">
           <tr>
             <th class="px-4 py-3 font-medium">ID</th>

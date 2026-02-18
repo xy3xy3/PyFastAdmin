@@ -66,6 +66,30 @@
     @apply mb-1 block text-sm text-slate-600;
   }
 
+  .admin-table-wrap {
+    @apply w-full max-w-full overflow-x-auto rounded-lg border border-slate-200;
+    overflow-y: hidden;
+    padding-bottom: 0.25rem;
+    scrollbar-gutter: stable;
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior-x: contain;
+  }
+
+  .admin-table-wrap .admin-table {
+    margin-bottom: 0.125rem;
+  }
+
+  .admin-table {
+    @apply min-w-full w-max text-left text-sm;
+  }
+
+  .admin-table th,
+  .admin-table td {
+    white-space: nowrap;
+    word-break: keep-all;
+    hyphens: none;
+  }
+
   .tag {
     @apply inline-flex items-center rounded-full border border-slate-200 px-2.5 py-0.5 text-xs font-medium text-slate-600;
   }
@@ -207,7 +231,7 @@
   }
 
   .admin-content {
-    @apply min-w-0 p-6;
+    @apply min-w-0 overflow-x-hidden p-6;
   }
 
   .bulk-fixed-layer {
